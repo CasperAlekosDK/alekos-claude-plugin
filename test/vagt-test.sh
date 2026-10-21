@@ -164,6 +164,21 @@ ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://www.facebook.com","tabI
 ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://admin.alekos.dk","tabId":1}')" '[]' 2
 ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://admin.alekos.dk","tabId":1}')" '[{"moenster":"(","hvad":"x"}]' 2
 
+# 0.5.7: Claude Codes eget Alekos-login (browserloginet) — kun en gyldig amcp_-nøgle for Alekos-pluginets server
+N="$(cd "$(dirname "$0")/.." && pwd)/plugins/alekos/hooks/noegle.mjs"
+nk(){ r=$(node -e "import('$N').then(m=>{const d=JSON.parse(process.argv[1]);console.log(m.vaelgAlekosNoegle(d,1000000)??'null')})" "$1"); if [ "$r" = "$2" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FEJL nøgle (fik $r, ville $2): $1"; fi; }
+K43=amcp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; K43B=amcp_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+nk "{\"mcpOAuth\":{\"plugin:alekos:alekos|abc\":{\"accessToken\":\"$K43\",\"expiresAt\":2000000}}}" "$K43"
+nk "{\"mcpOAuth\":{\"plugin:alekos:alekos|abc\":{\"accessToken\":\"$K43\",\"expiresAt\":1010000}}}" null
+nk "{\"mcpOAuth\":{\"andet|abc\":{\"accessToken\":\"$K43\",\"expiresAt\":2000000}}}" null
+nk "{\"mcpOAuth\":{\"plugin:alekos:alekos|abc\":{\"accessToken\":\"sb-ikke-amcp\",\"expiresAt\":2000000}}}" null
+nk "{\"mcpOAuth\":{\"plugin:alekos:alekos|a\":{\"accessToken\":\"$K43\",\"expiresAt\":2000000},\"plugin:alekos:alekos|b\":{\"accessToken\":\"$K43B\",\"expiresAt\":3000000}}}" "$K43B"
+nk '{"claudeAiOauth":{"accessToken":"x"}}' null
+nk 'null' null
+ln_=$(node -e "import('$N').then(m=>console.log(m.lagerNavn({})+'|'+m.lagerNavn({CLAUDE_CONFIG_DIR:'/x/y'})))")
+case "$ln_" in "Claude Code-credentials|Claude Code-credentials-"????????) pass=$((pass+1));; *) fail=$((fail+1)); echo "FEJL lagernavn: $ln_";; esac
+grep -q 'console\.\(log\|error\)' "$N" && { fail=$((fail+1)); echo "FEJL: noegle.mjs må aldrig skrive noget ud"; } || pass=$((pass+1))
+
 rm -rf "$S"
 echo "bestået $pass, fejl $fail"
 [ "$fail" = 0 ]

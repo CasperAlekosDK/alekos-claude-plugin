@@ -20,6 +20,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { claudeCodeNoegle } from "./noegle.mjs";
 
 const HOME = os.homedir();
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -129,6 +130,7 @@ async function forbindelser() {
   try { faelles = await import("../scripts/faelles.mjs"); } catch { return kendt(c.sidste) ?? FORBINDELSER_STANDARD; }
   let key = null;
   try { key = faelles.hentNoegle(); } catch { key = null; }
+  if (!key && process.env.ALEKOS_VAGT_INGEN_NOEGLERING !== "1") key = claudeCodeNoegle(); // browserloginet (0.5.7)
   if (!key) return kendt(c.sidste) ?? FORBINDELSER_STANDARD; // ikke logget ind: den sidste persons regler
   const id = crypto.createHash("sha256").update(key).digest("hex").slice(0, 24);
   const p = post(id);
@@ -145,6 +147,10 @@ async function forbindelser() {
     });
     const g = res.ok ? gyldigeRegler((await res.json())?.result) : null;
     if (g) {
+      // Browserloginets nøgle skifter hver time: ryd personposter, der ikke er brugt i et døgn (dog aldrig den sidste).
+      for (const [pid, pp] of Object.entries(c.personer)) {
+        if (pid !== c.sidste && !(typeof pp?.hentet === "number" && nu - pp.hentet < 86_400_000)) delete c.personer[pid];
+      }
       c.personer[id] = { hentet: nu, regler: g };
       c.sidste = id;
       gem();
