@@ -76,6 +76,7 @@ const FORBINDELSER_STANDARD = {
     { id: "database", moenster: "postgres|mysql|sqlite|mongo|redis|neon|planetscale|bigquery|snowflake|database", tilladt: false },
   ],
   ukendt_tilladt: true,
+  chrome_spaerret: [], // den faste lokale bund står i tjekChrome/tjekChromeUrl og gælder altid
 };
 const FORBINDELSER_CACHE_MS = 10 * 60 * 1000;
 
@@ -92,7 +93,14 @@ function gyldigeRegler(d) {
     if (!r || typeof r.id !== "string" || typeof r.moenster !== "string" || typeof r.tilladt !== "boolean") return null;
     try { new RegExp(r.moenster, "i"); } catch { return null; }
   }
-  return { regler: d.regler, ukendt_tilladt: d.ukendt_tilladt, altid_spaerret: d.altid_spaerret, vaerktoej_regler: v };
+  // 0.5.6: spærrede adresser i Chrome fra serveren (kan kun stramme; den lokale bund gælder altid).
+  const cs = d.chrome_spaerret ?? [];
+  if (!Array.isArray(cs)) return null;
+  for (const r of cs) {
+    if (!r || typeof r.moenster !== "string" || typeof r.hvad !== "string" || r.moenster.length > 300) return null;
+    try { new RegExp(r.moenster, "i"); } catch { return null; }
+  }
+  return { regler: d.regler, ukendt_tilladt: d.ukendt_tilladt, altid_spaerret: d.altid_spaerret, vaerktoej_regler: v, chrome_spaerret: cs };
 }
 
 /**
@@ -101,7 +109,12 @@ function gyldigeRegler(d) {
  * (Caspers "Fra" holder) — og først hvis der aldrig har været et svar, nødlisten. Fejl huskes 1 min (ingen ventetid).
  */
 async function forbindelser() {
-  if (process.env.ALEKOS_VAGT_OFFLINE === "1") return FORBINDELSER_STANDARD; // test: kun nødlisten
+  if (process.env.ALEKOS_VAGT_OFFLINE === "1") {
+    // test: kun nødlisten (+ evt. ekstra spærrede Chrome-adresser — kan kun stramme)
+    let ekstra = [];
+    try { ekstra = gyldigeRegler({ ...FORBINDELSER_STANDARD, chrome_spaerret: JSON.parse(process.env.ALEKOS_VAGT_TEST_CHROME ?? "[]") })?.chrome_spaerret ?? []; } catch { ekstra = []; }
+    return { ...FORBINDELSER_STANDARD, chrome_spaerret: ekstra };
+  }
   const fil = path.join(KONFIG, "alekos-forbindelser.json");
   const nu = Date.now();
   let c = {};
@@ -185,7 +198,16 @@ function chromeTekst(s) {
   return t;
 }
 
-function tjekChromeUrl(url) {
+/** Serverens spærrede adresser (kun stramme): værtsnavnet i en adresse, eller værtsnavne i tekst, der skrives/køres. */
+function tjekServerSider(vaerter, ekstra) {
+  for (const e of ekstra) {
+    const re = new RegExp(e.moenster, "i");
+    for (const v of vaerter) if (re.test(v)) bloker(`${e.hvad} i browseren (spærret af Alekos)`);
+  }
+}
+const VAERTER_I_TEKST = /[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+/gi;
+
+function tjekChromeUrl(url, ekstra = []) {
   const u = String(url).trim();
   if (/^(back|forward)$/i.test(u)) return;
   const m = u.match(CHROME_PROTOKOL);
@@ -196,9 +218,10 @@ function tjekChromeUrl(url) {
   if ((vaert.endsWith(".alekos.dk") && vaert !== "www.alekos.dk") || sider.test(vaert)) {
     bloker(`${vaert} i browseren (brug Alekos-MCP'en til Admin)`);
   }
+  tjekServerSider([vaert], ekstra);
 }
 
-function tjekChrome(navn, input) {
+function tjekChrome(navn, input, ekstra = []) {
   if (typeof navn !== "string") bloker("Chrome-kald uden navn");
   navn = navn.trim().toLowerCase().replace(/^mcp__claude-in-chrome__/, "");
   if (!CHROME_KENDTE.has(navn)) bloker(`ukendt Chrome-værktøj "${navn}"`);
@@ -209,13 +232,14 @@ function tjekChrome(navn, input) {
     for (const a of input.actions) {
       if (!a || typeof a !== "object") bloker("Chrome-batch med ukendt handling");
       if (String(a.name ?? "").trim().toLowerCase().replace(/^mcp__claude-in-chrome__/, "") === "browser_batch") bloker("Chrome-batch i batch");
-      tjekChrome(a.name, a.input);
+      tjekChrome(a.name, a.input, ekstra);
     }
     return;
   }
   const alt = chromeTekst(JSON.stringify(input));
   for (const [re, hvad] of CHROME_SIDER) if (re.test(alt)) bloker(`${hvad} i browseren (brug Alekos-MCP'en til Admin)`);
-  if (typeof input.url === "string") tjekChromeUrl(chromeTekst(input.url));
+  if (ekstra.length) tjekServerSider((alt.match(VAERTER_I_TEKST) ?? []).map((v) => v.toLowerCase()), ekstra);
+  if (typeof input.url === "string") tjekChromeUrl(chromeTekst(input.url), ekstra);
   if (navn === "computer" && input.action === "key" && CHROME_TASTER.test(String(input.text ?? ""))) {
     bloker("genvej til adresselinjen, ny fane eller nyt vindue (brug navigate)");
   }
@@ -343,7 +367,10 @@ const cwd = typeof data.cwd === "string" ? data.cwd : process.cwd();
 // Claude in Chrome (0.3.0): tilladt til flybookingsider og Facebook — KUN i en Chrome-profil uden Admin-login (guiden).
 // Vagten spærrer det, der kan hente en login-nøgle, hvis profilen alligevel er logget ind et sted.
 if (CHROME.test(tool)) {
-  tjekChrome(tool.slice("mcp__claude-in-chrome__".length), inp);
+  // Serverens liste (0.5.6) oveni den faste lokale bund; svarer serveren ikke, gælder sidst kendte/den lokale bund.
+  let ekstra = [];
+  try { ekstra = (await forbindelser()).chrome_spaerret ?? []; } catch { ekstra = []; }
+  tjekChrome(tool.slice("mcp__claude-in-chrome__".length), inp, ekstra);
   process.exit(0);
 }
 

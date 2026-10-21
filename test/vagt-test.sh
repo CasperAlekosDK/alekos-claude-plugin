@@ -143,6 +143,19 @@ b 'echo {} > .mcp.json' 2; b 'echo hi > ~/.claude/settings.json' 2; w Write src/
 chk 'null' 2; chk '"x"' 2; chk '{"tool_input":{}}' 2; chk '{"tool_name":"Read","tool_input":[]}' 2; chk "$(j Bash '{"command":["ls"]}')" 2
 b 'npm test' 0; b 'git status && npm run build' 0
 
+# 0.5.6: spærrede Chrome-adresser fra serveren (kan kun stramme)
+ct(){ printf '%s' "$1" | HOME="$S" CLAUDE_CONFIG_DIR= ALEKOS_VAGT_OFFLINE=1 ALEKOS_VAGT_TEST_CHROME="$2" node "$V" >/dev/null 2>&1; r=$?; if [ $r = "$3" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FEJL (fik $r, ville $3): $1 / $2"; fi; }
+DIN='[{"moenster":"(^|\\.)dinero\\.dk$","hvad":"Dinero"}]'
+ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://app.dinero.dk/x","tabId":1}')" "$DIN" 2
+ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://app.dinero.dk/x","tabId":1}')" '[]' 0
+ct "$(j mcp__claude-in-chrome__computer '{"action":"type","text":"gå til app.dinero.dk","tabId":1}')" "$DIN" 2
+ct "$(j mcp__claude-in-chrome__browser_batch '{"actions":[{"name":"navigate","input":{"url":"https://dinero.dk","tabId":1}}]}')" "$DIN" 2
+ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://www.facebook.com","tabId":1}')" "$DIN" 0
+ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://www.alekos.dk","tabId":1}')" "$DIN" 0
+# Serveren kan ikke løsne den lokale bund (tom liste eller ugyldig liste → admin.alekos.dk stadig spærret)
+ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://admin.alekos.dk","tabId":1}')" '[]' 2
+ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://admin.alekos.dk","tabId":1}')" '[{"moenster":"(","hvad":"x"}]' 2
+
 rm -rf "$S"
 echo "bestået $pass, fejl $fail"
 [ "$fail" = 0 ]
