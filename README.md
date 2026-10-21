@@ -81,7 +81,11 @@ Casper kan fortryde enhver gemt rettelse.
 - **Andre forbindelser** (Gmail, Outlook, Slack …) virker som i dag. Supabase, Dinero og Lovable slår Casper til/fra
   for dig i Admin. Værktøjer, der styrer filer, browser, terminal eller VS Code, er altid spærret.
 
-## 7. Log ud
+## 7. Hvilken udgave har jeg?
+
+`/plugin` → fanen **Installed** → **alekos** viser versionen. Den opdateres af sig selv ved start.
+
+## 8. Log ud
 
 `/mcp` → alekos → **Clear authentication**. Casper kan også logge dig ud alle steder fra Admin (Claude-adgang).
 
