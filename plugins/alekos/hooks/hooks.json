@@ -1,0 +1,35 @@
+{
+  "description": "Alekos sikkerhedsvagt: blokerer ~/Library-appdata, nøglering, ~/.ssh, ~/Hemmeligt, .env, direkte kald til Supabase, ændringer af Claude Codes indstillinger og MCP-servere, der kan læse database/editor; Claude in Chrome kun uden for Alekos' systemer, Supabase og Lovable og uden adgang til lagrede logins. Fejler vagten, blokeres kaldet. Ved hver start sætter pluginet selv Alekos' sikkerhedsregler i Claude Codes settings.json (aldrig Caspers egen opsætning).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Edit|Write|MultiEdit|NotebookEdit|Grep|Glob|WebFetch|Monitor|ReadMcpResourceTool|ReadMcpResourceDirTool|ListMcpResourcesTool|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/vagt.mjs"
+            ],
+            "timeout": 10,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/opstart.mjs"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

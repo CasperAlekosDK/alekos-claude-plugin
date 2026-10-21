@@ -1,0 +1,17 @@
+{
+  "name": "alekos-intern",
+  "owner": {
+    "name": "Alekos Rejser ApS",
+    "email": "casper@alekos.dk"
+  },
+  "metadata": {
+    "description": "Alekos Rejsers interne Claude Code-plugins til kontoret."
+  },
+  "plugins": [
+    {
+      "name": "alekos",
+      "source": "./plugins/alekos",
+      "description": "Alekos' MCP-server (eget Admin-login + to-faktor) med arbejdsregler og fagviden fra serveren, og sikkerhedsvagt til kontorets medarbejdere."
+    }
+  ]
+}

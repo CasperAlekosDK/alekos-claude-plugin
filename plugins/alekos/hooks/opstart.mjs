@@ -1,0 +1,148 @@
+#!/usr/bin/env node
+// Alekos-pluginets opstartsregel (SessionStart, fra 0.5.0 — Caspers krav 21.10.2026: ingen Terminal, ingen zip).
+// Fletter Alekos' sikkerhedsregler (sikkerhed/regler.mjs) ind i Claude Codes settings.json ved hver start, uden
+// spørgsmål. Idempotent: står reglerne der allerede, ændres intet. Før hver ændring tages en backup.
+// Værn:
+// - Caspers egen opsætning (~/.claude som brugeren casperkloster) røres ALDRIG.
+// - En ugyldig settings.json ændres aldrig (personen får besked i stedet).
+// - Fejl her stopper aldrig Claude Code; sikkerhedsvagten (vagt.mjs) virker uanset.
+import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { erCaspersOpsaetning, flet, konfigMappe } from "../sikkerhed/regler.mjs";
+
+const BACKUP_PREFIX = "settings.json.alekos-backup-";
+const FOERSTE_BACKUP = "settings.json.foer-alekos"; // slettes aldrig
+const MAKS_BACKUPS = 5;
+const LAAS = ".alekos-opstart.laas";
+
+// systemMessage vises for personen; additionalContext går til Claude, så den selv beder om genstart (VS Code kan
+// skjule hook-beskeder — kontrollantfund 21.10.2026).
+function besked(tekst) {
+  process.stdout.write(JSON.stringify({
+    systemMessage: tekst,
+    hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: `Besked fra Alekos-pluginet til medarbejderen (sig den med det samme, kort): ${tekst}` },
+  }));
+}
+
+const inde = (mappe, sti) => {
+  const r = path.relative(mappe, sti);
+  return r === "" || (!r.startsWith("..") && !path.isAbsolute(r));
+};
+const laes = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
+
+/** Er mappen beviseligt Alekos-pluginet (eller dets markedsplads)? Aldrig /, hjemmemappen eller en mappe over den. */
+function erAlekosMappe(p, art) {
+  let r;
+  try { r = fs.realpathSync(p); } catch { return null; }
+  const hjem = [os.userInfo().homedir, os.homedir()].map((h) => { try { return fs.realpathSync(h); } catch { return h; } });
+  if (r === path.parse(r).root || hjem.some((h) => inde(r, h))) return null; // / eller hjemmemappen eller over den
+  if (art === "plugin") return laes(path.join(r, ".claude-plugin", "plugin.json"))?.name === "alekos" ? r : null;
+  return laes(path.join(r, ".claude-plugin", "marketplace.json"))?.name === "alekos-intern" ? r : null;
+}
+
+/** Pluginets egne mapper uden for Claude Codes opsætning (fx en lokal kildemappe), som skal være skrivebeskyttede. */
+function pluginMapper(konfig) {
+  const ud = [];
+  const rod = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  ud.push(erAlekosMappe(rod, "plugin"));
+  const m = laes(path.join(konfig, "plugins", "known_marketplaces.json"))?.["alekos-intern"];
+  for (const p of [m?.installLocation, m?.source?.path]) if (typeof p === "string" && p) ud.push(erAlekosMappe(p, "markedsplads"));
+  let k = konfig;
+  try { k = fs.realpathSync(konfig); } catch { /* findes ikke endnu */ }
+  return [...new Set(ud.filter(Boolean))].filter((p) => !inde(k, p));
+}
+
+function ryddBackups(mappe) {
+  const filer = fs.readdirSync(mappe).filter((f) => f.startsWith(BACKUP_PREFIX)).sort();
+  for (const f of filer.slice(0, Math.max(0, filer.length - MAKS_BACKUPS))) fs.rmSync(path.join(mappe, f), { force: true });
+}
+
+/** Kun én start ad gangen skriver (to VS Code-vinduer kan starte samtidig). Låsen regnes for død efter 30 sek. */
+function tagLaas(konfig) {
+  const l = path.join(konfig, LAAS);
+  try {
+    fs.mkdirSync(l);
+    return () => fs.rmSync(l, { recursive: true, force: true });
+  } catch (e) {
+    if (e?.code !== "EEXIST") throw e; // fx ingen skriveret: giv besked (fanges i bunden)
+    try {
+      if (Date.now() - fs.statSync(l).mtimeMs > 30_000) {
+        fs.rmSync(l, { recursive: true, force: true });
+        fs.mkdirSync(l);
+        return () => fs.rmSync(l, { recursive: true, force: true });
+      }
+    } catch { /* en anden tog den */ }
+    return null;
+  }
+}
+
+function koer() {
+  const konfig = konfigMappe();
+  if (erCaspersOpsaetning(konfig)) return; // aldrig Caspers egen opsætning
+  const fil = path.join(konfig, "settings.json");
+
+  let nu = {};
+  let raa = null;
+  if (fs.existsSync(fil)) {
+    if (fs.lstatSync(fil).isSymbolicLink()) {
+      besked("Alekos: sikkerhedsreglerne blev ikke sat, fordi settings.json er et link. Ring til Casper.");
+      return;
+    }
+    raa = fs.readFileSync(fil, "utf8");
+    try {
+      const ren = raa.replace(/^\uFEFF/, "");
+      nu = ren.trim() ? JSON.parse(ren) : {};
+    } catch {
+      besked(`Alekos: sikkerhedsreglerne kunne ikke sættes, fordi ${fil} ikke er gyldig JSON. Intet er ændret. Ring til Casper.`);
+      return;
+    }
+    if (nu === null || typeof nu !== "object" || Array.isArray(nu)) {
+      besked(`Alekos: sikkerhedsreglerne kunne ikke sættes, fordi ${fil} har et uventet indhold. Intet er ændret. Ring til Casper.`);
+      return;
+    }
+  }
+
+  const ny = flet(nu, { konfig, ekstraMapper: pluginMapper(konfig), fjernUndtagelser: true });
+  if (raa !== null && JSON.stringify(ny) === JSON.stringify(nu)) return; // står der allerede
+  const tekst = JSON.stringify(ny, null, 2) + "\n";
+
+  fs.mkdirSync(konfig, { recursive: true });
+  const slipLaas = tagLaas(konfig);
+  if (!slipLaas) return; // en anden start er i gang med det samme
+  try {
+    // Læs igen under låsen: er filen ændret imens, gør næste start det (aldrig overskrive en frisk ændring).
+    const nuRaa = fs.existsSync(fil) ? fs.readFileSync(fil, "utf8") : null;
+    if (nuRaa !== raa) return;
+    const foerste = !fs.existsSync(path.join(konfig, FOERSTE_BACKUP));
+    if (raa !== null) {
+      if (foerste) fs.writeFileSync(path.join(konfig, FOERSTE_BACKUP), raa, { flag: "wx", mode: 0o600 });
+      const t = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").replace(".", "-").replace("Z", "");
+      fs.writeFileSync(path.join(konfig, `${BACKUP_PREFIX}${t}-${process.pid}-${crypto.randomBytes(3).toString("hex")}`), raa, { flag: "wx", mode: 0o600 });
+      ryddBackups(konfig);
+    } else if (foerste) {
+      fs.writeFileSync(path.join(konfig, FOERSTE_BACKUP), "{}\n", { flag: "wx", mode: 0o600 }); // der var ingen fil
+    }
+    // Atomisk: skriv en midlertidig fil og omdøb (en halvt skrevet settings.json ville stoppe Claude Code).
+    const tmp = path.join(konfig, `.settings.json.alekos-${process.pid}-${crypto.randomBytes(4).toString("hex")}`);
+    fs.writeFileSync(tmp, tekst, { flag: "wx", mode: 0o600 });
+    fs.renameSync(tmp, fil);
+    const fjernet = Array.isArray(nu?.sandbox?.excludedCommands) && nu.sandbox.excludedCommands.length
+      ? ` Kommandoer, der før kørte uden sandkasse (${nu.sandbox.excludedCommands.slice(0, 5).join(", ")}), kører nu i sandkassen.`
+      : "";
+    besked((foerste
+      ? "Alekos: sikkerhedsreglerne er sat. Genstart VS Code-vinduet én gang (⌘ + Shift + P → Developer: Reload Window), så sandkassen er slået til."
+      : "Alekos: sikkerhedsreglerne er opdateret. Genstart VS Code-vinduet (⌘ + Shift + P → Developer: Reload Window).") + fjernet);
+  } finally {
+    slipLaas();
+  }
+}
+
+try {
+  koer();
+} catch (e) {
+  besked(`Alekos: sikkerhedsreglerne kunne ikke sættes (${String(e?.message ?? e).slice(0, 200)}). Sikkerhedsvagten virker stadig. Ring til Casper.`);
+}
+process.exit(0);

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "alekos": {
+      "type": "http",
+      "url": "https://rufnmcnhebhzhzzgljcs.supabase.co/functions/v1/alekos-mcp",
+      "headersHelper": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/headers.mjs\"",
+      "oauth": {
+        "clientId": "alekos-claude-code",
+        "authServerMetadataUrl": "https://rufnmcnhebhzhzzgljcs.supabase.co/functions/v1/alekos-mcp/.well-known/oauth-authorization-server"
+      }
+    }
+  }
+}
