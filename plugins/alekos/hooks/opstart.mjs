@@ -6,7 +6,7 @@
 // - Caspers egen opsætning (~/.claude som brugeren casperkloster) røres ALDRIG.
 // - En ugyldig settings.json ændres aldrig (personen får besked i stedet).
 // - Fejl her stopper aldrig Claude Code; sikkerhedsvagten (vagt.mjs) virker uanset.
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -146,22 +146,62 @@ function koer() {
  * Claude Codes indbyggede autoUpdate kørte ikke i test 21.10.2026 (11 min, ingen opdatering) — derfor også dette.
  * Kun for Alekos' GitHub-markedsplads; aldrig for en lokal mappe (Caspers test). Ny udgave bruges ved næste start.
  */
+/**
+ * Stien til det Claude Code-program, der startede denne hook. CLAUDE_CODE_EXECPATH gives IKKE til hooks (kun til
+ * Bash-værktøjet — kontrollantfund 21.10.2026), så vi går op gennem forælderprocesserne til et program ved navn claude.
+ */
+function claudeProgram() {
+  const ok = (p) => {
+    if (!p || !path.isAbsolute(p) || path.basename(p) !== "claude") return null;
+    try { return fs.statSync(p).isFile() ? p : null; } catch { return null; }
+  };
+  let pid = process.ppid;
+  for (let i = 0; i < 6 && pid > 1; i++) {
+    let ud;
+    try {
+      ud = execFileSync("/bin/ps", ["-o", "ppid=", "-o", "comm=", "-p", String(pid)], { encoding: "utf8", timeout: 2000 }).trim();
+    } catch { return null; }
+    const m = ud.match(/^(\d+)\s+(.+)$/);
+    if (!m) return null;
+    const fundet = ok(m[2].trim());
+    if (fundet) return fundet;
+    pid = Number(m[1]);
+  }
+  return null;
+}
+
 function opdaterIBaggrunden() {
   if (process.env.ALEKOS_OPDATERER) return; // aldrig i den proces, vi selv starter
   const konfig = konfigMappe();
   if (erCaspersOpsaetning(konfig)) return;
   const km = laes(path.join(konfig, "plugins", "known_marketplaces.json"))?.[MARKEDSPLADS];
   if (km?.source?.source !== "github" || String(km.source.repo).toLowerCase() !== GITHUB_REPO.toLowerCase()) return;
-  const cl = process.env.CLAUDE_CODE_EXECPATH;
-  if (!cl || !path.isAbsolute(cl) || !fs.existsSync(cl)) return;
+  // Kun Claude Codes eget program (ikke fx node, der ellers ville køre ./plugin.js fra projektmappen — kontrollantfund).
+  const cl = claudeProgram();
+  if (!cl) return;
   const maerke = path.join(konfig, ".alekos-opdateret");
   try {
-    if (Date.now() - fs.statSync(maerke).mtimeMs < 3_600_000) return;
+    const st = fs.lstatSync(maerke);
+    if (!st.isFile()) return; // aldrig gennem et link
+    if (Date.now() - st.mtimeMs < 3_600_000) return;
   } catch { /* første gang */ }
-  fs.writeFileSync(maerke, new Date().toISOString() + "\n");
+  // Lås: kun én opdatering ad gangen (fjernes af kommandoen selv, regnes for død efter 30 min).
+  const laas = path.join(konfig, ".alekos-opdaterer.laas");
+  try {
+    fs.mkdirSync(laas);
+  } catch (e) {
+    if (e?.code !== "EEXIST") return;
+    try {
+      if (Date.now() - fs.statSync(laas).mtimeMs < 1_800_000) return;
+      fs.rmSync(laas, { recursive: true, force: true });
+      fs.mkdirSync(laas);
+    } catch { return; }
+  }
+  fs.rmSync(maerke, { force: true });
+  fs.writeFileSync(maerke, new Date().toISOString() + "\n", { flag: "wx", mode: 0o600 });
   const env = { ...process.env, ALEKOS_OPDATERER: "1" };
-  const p = spawn("/bin/sh", ["-c", '"$0" plugin marketplace update "$1" && "$0" plugin update "$2"', cl, MARKEDSPLADS, `alekos@${MARKEDSPLADS}`], {
-    detached: true, stdio: "ignore", env,
+  const p = spawn("/bin/sh", ["-c", '"$0" plugin marketplace update "$1" && "$0" plugin update "$2"; rm -rf "$3"', cl, MARKEDSPLADS, `alekos@${MARKEDSPLADS}`, laas], {
+    cwd: konfig, detached: true, stdio: "ignore", env,
   });
   p.unref();
 }
