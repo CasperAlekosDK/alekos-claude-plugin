@@ -153,7 +153,7 @@ gh github CasperAlekosDK/alekos-claude-plugin; start "$S/bin/node-agtig"; sleep 
 ok "16 ikke et program med et andet navn" '[ ! -e "$S/kald.log" ]'
 rm -f "$S/kald.log"; HOME="$S/h15" CLAUDE_CONFIG_DIR="$K" CLAUDE_CODE_EXECPATH="$S/bin/claude" node "$O" >/dev/null; sleep 1
 ok "16 CLAUDE_CODE_EXECPATH bruges ikke" '[ ! -e "$S/kald.log" ]'
-echo hemmelig > "$S/maal"; ln -s "$S/maal" "$K/.alekos-opdateret"; start "$S/bin/claude"; sleep 0.5
+echo hemmelig > "$S/maal"; rm -f "$K/.alekos-opdateret"; ln -s "$S/maal" "$K/.alekos-opdateret"; touch -h -t 202001010000 "$K/.alekos-opdateret"; ok "16 linket findes" '[ -L "$K/.alekos-opdateret" ]'; start "$S/bin/claude"; sleep 0.5
 ok "16 mærkefil som link: målet urørt, ingen opdatering" '[ "$(cat "$S/maal")" = hemmelig ] && [ ! -e "$S/kald.log" ]'
 rm -f "$K/.alekos-opdateret"; mkdir "$K/.alekos-opdaterer.laas"; start "$S/bin/claude"; sleep 0.5
 ok "16 lås holdt: ingen anden opdatering" '[ ! -e "$S/kald.log" ]'
