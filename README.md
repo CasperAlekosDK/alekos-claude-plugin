@@ -101,8 +101,8 @@ Opstartsreglen og `opsaetning/sikkerhed.mjs` nægter begge at ændre din `~/.cla
 bruger falske mapper.
 
 **Ny udgave ud:** ret, kør begge tests, hæv `version` i `plugins/alekos/.claude-plugin/plugin.json`, commit og push til
-`main`. Medarbejdernes Claude Code henter den ved næste start (markedspladsen har `autoUpdate`, som opstartsreglen
-selv slår til). Fjerner du en sikkerhedsregel, skal den også i `FJERNEDE_REGLER` i `plugins/alekos/sikkerhed/regler.mjs`
+`main`. Opstartsreglen henter den selv i baggrunden (højst én gang i timen, med `claude plugin update`), og den bruges
+fra næste genstart. Claude Codes egen `autoUpdate` slås også til, men kørte ikke i test 21.10.2026. Fjerner du en sikkerhedsregel, skal den også i `FJERNEDE_REGLER` i `plugins/alekos/sikkerhed/regler.mjs`
 (fletningen tilføjer ellers kun). Arbejdsregler, fagviden og adgang ligger på serveren og kræver ingen ny udgave.
 
 **Nødveje:** `node plugins/alekos/scripts/login.mjs` (login i Terminal, hvis browserloginet ikke virker) og

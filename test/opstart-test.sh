@@ -128,6 +128,26 @@ ok "14 ikke på andre" '[ "$(felt "$K/settings.json" "\"autoUpdate\" in d[\"extr
 printf '%s' '{"extraKnownMarketplaces":{"alekos-intern":{"source":{"source":"github","repo":"angriber/falsk"}}}}' > "$K/settings.json"; koer "$K" "$S/h14"
 ok "14 ikke på falsk repo med samme navn" '[ "$(felt "$K/settings.json" "\"autoUpdate\" in d[\"extraKnownMarketplaces\"][\"alekos-intern\"]")" = False ]'
 
+# 15) Baggrundsopdatering: kun Alekos' GitHub-markedsplads, højst én gang i timen, aldrig rekursivt
+FAKECL="$S/fakeclaude"; printf '#!/bin/sh\necho "$*" >> "%s/kald.log"\n' "$S" > "$FAKECL"; chmod +x "$FAKECL"
+vent(){ for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$S/kald.log" ] && break; sleep 0.2; done; }
+K="$S/k15"; mkdir -p "$K/plugins"; printf '%s' '{"alekos-intern":{"source":{"source":"github","repo":"CasperAlekosDK/alekos-claude-plugin"}}}' > "$K/plugins/known_marketplaces.json"
+rm -f "$S/kald.log"; HOME="$S/h15" CLAUDE_CONFIG_DIR="$K" CLAUDE_CODE_EXECPATH="$FAKECL" node "$O" >/dev/null; vent
+ok "15 opdaterer markedspladsen og pluginet" 'grep -q "^plugin marketplace update alekos-intern$" "$S/kald.log" && grep -q "^plugin update alekos@alekos-intern$" "$S/kald.log"'
+rm -f "$S/kald.log"; HOME="$S/h15" CLAUDE_CONFIG_DIR="$K" CLAUDE_CODE_EXECPATH="$FAKECL" node "$O" >/dev/null; sleep 1
+ok "15 højst én gang i timen" '[ ! -e "$S/kald.log" ]'
+rm -f "$K/.alekos-opdateret" "$S/kald.log"; HOME="$S/h15" CLAUDE_CONFIG_DIR="$K" CLAUDE_CODE_EXECPATH="$FAKECL" ALEKOS_OPDATERER=1 node "$O" >/dev/null; sleep 1
+ok "15 aldrig fra den proces, den selv startede" '[ ! -e "$S/kald.log" ]'
+printf '%s' '{"alekos-intern":{"source":{"source":"directory","path":"/x"}}}' > "$K/plugins/known_marketplaces.json"; rm -f "$K/.alekos-opdateret"
+HOME="$S/h15" CLAUDE_CONFIG_DIR="$K" CLAUDE_CODE_EXECPATH="$FAKECL" node "$O" >/dev/null; sleep 1
+ok "15 ikke for en lokal mappe (Caspers test)" '[ ! -e "$S/kald.log" ]'
+printf '%s' '{"alekos-intern":{"source":{"source":"github","repo":"angriber/falsk"}}}' > "$K/plugins/known_marketplaces.json"
+HOME="$S/h15" CLAUDE_CONFIG_DIR="$K" CLAUDE_CODE_EXECPATH="$FAKECL" node "$O" >/dev/null; sleep 1
+ok "15 ikke for et falsk repo" '[ ! -e "$S/kald.log" ]'
+printf '%s' '{"alekos-intern":{"source":{"source":"github","repo":"CasperAlekosDK/alekos-claude-plugin"}}}' > "$K/plugins/known_marketplaces.json"
+HOME="$S/h15" CLAUDE_CONFIG_DIR="$K" CLAUDE_CODE_EXECPATH="relativ/sti" node "$O" >/dev/null; sleep 1
+ok "15 kun et absolut program" '[ ! -e "$S/kald.log" ]'
+
 rm -rf "$S"
 echo "bestået $pass, fejl $fail"
 [ "$fail" = 0 ]

@@ -6,12 +6,13 @@
 // - Caspers egen opsætning (~/.claude som brugeren casperkloster) røres ALDRIG.
 // - En ugyldig settings.json ændres aldrig (personen får besked i stedet).
 // - Fejl her stopper aldrig Claude Code; sikkerhedsvagten (vagt.mjs) virker uanset.
+import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { erCaspersOpsaetning, flet, konfigMappe } from "../sikkerhed/regler.mjs";
+import { GITHUB_REPO, MARKEDSPLADS, erCaspersOpsaetning, flet, konfigMappe } from "../sikkerhed/regler.mjs";
 
 const BACKUP_PREFIX = "settings.json.alekos-backup-";
 const FOERSTE_BACKUP = "settings.json.foer-alekos"; // slettes aldrig
@@ -140,9 +141,37 @@ function koer() {
   }
 }
 
+/**
+ * Henter nyeste udgave af pluginet i baggrunden (højst én gang i timen), med Claude Codes egne kommandoer.
+ * Claude Codes indbyggede autoUpdate kørte ikke i test 21.10.2026 (11 min, ingen opdatering) — derfor også dette.
+ * Kun for Alekos' GitHub-markedsplads; aldrig for en lokal mappe (Caspers test). Ny udgave bruges ved næste start.
+ */
+function opdaterIBaggrunden() {
+  if (process.env.ALEKOS_OPDATERER) return; // aldrig i den proces, vi selv starter
+  const konfig = konfigMappe();
+  if (erCaspersOpsaetning(konfig)) return;
+  const km = laes(path.join(konfig, "plugins", "known_marketplaces.json"))?.[MARKEDSPLADS];
+  if (km?.source?.source !== "github" || String(km.source.repo).toLowerCase() !== GITHUB_REPO.toLowerCase()) return;
+  const cl = process.env.CLAUDE_CODE_EXECPATH;
+  if (!cl || !path.isAbsolute(cl) || !fs.existsSync(cl)) return;
+  const maerke = path.join(konfig, ".alekos-opdateret");
+  try {
+    if (Date.now() - fs.statSync(maerke).mtimeMs < 3_600_000) return;
+  } catch { /* første gang */ }
+  fs.writeFileSync(maerke, new Date().toISOString() + "\n");
+  const env = { ...process.env, ALEKOS_OPDATERER: "1" };
+  const p = spawn("/bin/sh", ["-c", '"$0" plugin marketplace update "$1" && "$0" plugin update "$2"', cl, MARKEDSPLADS, `alekos@${MARKEDSPLADS}`], {
+    detached: true, stdio: "ignore", env,
+  });
+  p.unref();
+}
+
 try {
   koer();
 } catch (e) {
   besked(`Alekos: sikkerhedsreglerne kunne ikke sættes (${String(e?.message ?? e).slice(0, 200)}). Sikkerhedsvagten virker stadig. Ring til Casper.`);
 }
+try {
+  opdaterIBaggrunden();
+} catch { /* en fejlet opdatering må aldrig stoppe Claude Code; prøves igen om en time */ }
 process.exit(0);
