@@ -93,12 +93,15 @@ function gyldigeRegler(d) {
     if (!r || typeof r.id !== "string" || typeof r.moenster !== "string" || typeof r.tilladt !== "boolean") return null;
     try { new RegExp(r.moenster, "i"); } catch { return null; }
   }
-  // 0.5.6: spærrede adresser i Chrome fra serveren (kan kun stramme; den lokale bund gælder altid).
+  // 0.5.6: spærrede adresser i Chrome fra serveren (kan kun stramme; den lokale bund gælder altid). Kun domænenavne —
+  // ingen regex fra serveren, så en fejl dér aldrig kan få vagten til at hænge (kontrollantfund 21.10.2026).
   const cs = d.chrome_spaerret ?? [];
-  if (!Array.isArray(cs)) return null;
+  const DOM = /^[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63}){1,6}$/;
+  if (!Array.isArray(cs) || cs.length > 200) return null;
   for (const r of cs) {
-    if (!r || typeof r.moenster !== "string" || typeof r.hvad !== "string" || r.moenster.length > 300) return null;
-    try { new RegExp(r.moenster, "i"); } catch { return null; }
+    if (!r || typeof r.domaene !== "string" || !DOM.test(r.domaene) || typeof r.hvad !== "string") return null;
+    if (r.undtagen !== undefined && (!Array.isArray(r.undtagen) || r.undtagen.some((u) => typeof u !== "string"))) return null;
+    if (r.kun_adresse !== undefined && typeof r.kun_adresse !== "boolean") return null;
   }
   return { regler: d.regler, ukendt_tilladt: d.ukendt_tilladt, altid_spaerret: d.altid_spaerret, vaerktoej_regler: v, chrome_spaerret: cs };
 }
@@ -198,14 +201,22 @@ function chromeTekst(s) {
   return t;
 }
 
-/** Serverens spærrede adresser (kun stramme): værtsnavnet i en adresse, eller værtsnavne i tekst, der skrives/køres. */
-function tjekServerSider(vaerter, ekstra) {
+/**
+ * Serverens spærrede adresser (kun stramme): værtsnavnet i en adresse (adresse=true), eller værtsnavne i tekst, der
+ * skrives/køres (kun regler uden kun_adresse — fx må "mit.alekos.dk" gerne stå i en besked).
+ */
+function tjekServerSider(vaerter, ekstra, adresse) {
   for (const e of ekstra) {
-    const re = new RegExp(e.moenster, "i");
-    for (const v of vaerter) if (re.test(v)) bloker(`${e.hvad} i browseren (spærret af Alekos)`);
+    if (e.kun_adresse && !adresse) continue;
+    for (const raa of vaerter) {
+      const v = raa.toLowerCase().replace(/\.+$/, "");
+      if ((v === e.domaene || v.endsWith(`.${e.domaene}`)) && !(e.undtagen ?? []).includes(v)) bloker(`${e.hvad} i browseren (spærret af Alekos)`);
+    }
   }
 }
-const VAERTER_I_TEKST = /[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+/gi;
+// Lineært mønster (ingen indlejret valgfri gruppe), og meget lang tekst afvises, når serverlisten er i brug.
+const VAERTER_I_TEKST = /[a-z0-9-]+(?:\.[a-z0-9-]+)+/gi;
+const MAKS_CHROME_TEKST = 50_000;
 
 function tjekChromeUrl(url, ekstra = []) {
   const u = String(url).trim();
@@ -218,7 +229,7 @@ function tjekChromeUrl(url, ekstra = []) {
   if ((vaert.endsWith(".alekos.dk") && vaert !== "www.alekos.dk") || sider.test(vaert)) {
     bloker(`${vaert} i browseren (brug Alekos-MCP'en til Admin)`);
   }
-  tjekServerSider([vaert], ekstra);
+  tjekServerSider([vaert], ekstra, true);
 }
 
 function tjekChrome(navn, input, ekstra = []) {
@@ -238,7 +249,10 @@ function tjekChrome(navn, input, ekstra = []) {
   }
   const alt = chromeTekst(JSON.stringify(input));
   for (const [re, hvad] of CHROME_SIDER) if (re.test(alt)) bloker(`${hvad} i browseren (brug Alekos-MCP'en til Admin)`);
-  if (ekstra.length) tjekServerSider((alt.match(VAERTER_I_TEKST) ?? []).map((v) => v.toLowerCase()), ekstra);
+  if (ekstra.length) {
+    if (alt.length > MAKS_CHROME_TEKST) bloker("meget lang tekst i browseren (del den op)");
+    tjekServerSider(alt.match(VAERTER_I_TEKST) ?? [], ekstra, false);
+  }
   if (typeof input.url === "string") tjekChromeUrl(chromeTekst(input.url), ekstra);
   if (navn === "computer" && input.action === "key" && CHROME_TASTER.test(String(input.text ?? ""))) {
     bloker("genvej til adresselinjen, ny fane eller nyt vindue (brug navigate)");

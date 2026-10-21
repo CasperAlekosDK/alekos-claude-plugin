@@ -145,13 +145,21 @@ b 'npm test' 0; b 'git status && npm run build' 0
 
 # 0.5.6: spærrede Chrome-adresser fra serveren (kan kun stramme)
 ct(){ printf '%s' "$1" | HOME="$S" CLAUDE_CONFIG_DIR= ALEKOS_VAGT_OFFLINE=1 ALEKOS_VAGT_TEST_CHROME="$2" node "$V" >/dev/null 2>&1; r=$?; if [ $r = "$3" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FEJL (fik $r, ville $3): $1 / $2"; fi; }
-DIN='[{"moenster":"(^|\\.)dinero\\.dk$","hvad":"Dinero"}]'
+DIN='[{"domaene":"dinero.dk","hvad":"Dinero"}]'
+ALE='[{"domaene":"alekos.dk","undtagen":["alekos.dk","www.alekos.dk"],"kun_adresse":true,"hvad":"Alekos"}]'
 ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://app.dinero.dk/x","tabId":1}')" "$DIN" 2
+ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://dinero.dk","tabId":1}')" "$DIN" 2
 ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://app.dinero.dk/x","tabId":1}')" '[]' 0
 ct "$(j mcp__claude-in-chrome__computer '{"action":"type","text":"gå til app.dinero.dk","tabId":1}')" "$DIN" 2
 ct "$(j mcp__claude-in-chrome__browser_batch '{"actions":[{"name":"navigate","input":{"url":"https://dinero.dk","tabId":1}}]}')" "$DIN" 2
+ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://notdinero.dk","tabId":1}')" "$DIN" 0
 ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://www.facebook.com","tabId":1}')" "$DIN" 0
-ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://www.alekos.dk","tabId":1}')" "$DIN" 0
+ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://www.alekos.dk","tabId":1}')" "$ALE" 0
+ct "$(j mcp__claude-in-chrome__computer '{"action":"type","text":"Se mere på mit.alekos.dk","tabId":1}')" "$ALE" 0
+LANGTEKST_INPUT=$(python3 -c 'import json;print(json.dumps({"action":"type","text":"a"*60000,"tabId":1}))')
+ct "$(j mcp__claude-in-chrome__computer "$LANGTEKST_INPUT")" "$DIN" 2
+# Et regex fra serveren afvises helt (ingen regex længere) → kun den lokale bund; facebook stadig tilladt, admin spærret
+ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://www.facebook.com","tabId":1}')" '[{"moenster":"(a+)+$","hvad":"x"}]' 0
 # Serveren kan ikke løsne den lokale bund (tom liste eller ugyldig liste → admin.alekos.dk stadig spærret)
 ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://admin.alekos.dk","tabId":1}')" '[]' 2
 ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://admin.alekos.dk","tabId":1}')" '[{"moenster":"(","hvad":"x"}]' 2
