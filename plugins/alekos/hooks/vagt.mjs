@@ -44,7 +44,7 @@ const STIER = [
 ];
 
 const BASH = [
-  [/\bsecurity\b[^\n|;&]*(find-generic-password|find-internet-password|find-certificate|dump-keychain|export|unlock-keychain|\s-i\b)/i, "nøgleringen (security)"],
+  [/\bsecurity\b[^\n|;&]*(find-|add-|delete-|set-|dump-keychain|export|import|unlock-keychain|create-keychain|list-keychains|default-keychain|login-keychain|\s-i\b)/i, "nøgleringen (security)"],
   [/supabase\.(co|in|com)\b/i, "direkte kald til Supabase"],
   [/\b(headers|login|faelles)\.mjs\b/i, "Alekos' login-/nøglescripts"],
   [/alekos-claude-plugin/i, "Alekos-pluginets mappe"],
@@ -122,15 +122,33 @@ async function forbindelser() {
   const fil = path.join(KONFIG, "alekos-forbindelser.json");
   const nu = Date.now();
   let c = {};
-  try { const x = JSON.parse(fs.readFileSync(fil, "utf8")); if (x && typeof x === "object" && !Array.isArray(x)) c = x; } catch { /* ingen cache */ }
+  let laeselig = true;
+  try {
+    const x = JSON.parse(fs.readFileSync(fil, "utf8"));
+    if (x && typeof x === "object" && !Array.isArray(x)) c = x; else laeselig = false;
+  } catch (e) { laeselig = e?.code === "ENOENT"; /* findes ikke = ok; halvt skrevet/ugyldig = overskriv aldrig */ }
   const post = (id) => (c.personer && typeof c.personer[id] === "object" ? c.personer[id] : null);
   const kendt = (id) => gyldigeRegler(post(id)?.regler);
-  const gem = () => { try { fs.writeFileSync(fil, JSON.stringify(c), { mode: 0o600 }); } catch { /* kun cache */ } };
+  // Atomisk (to vagter kan køre samtidig), og aldrig oven i en cache, der ikke kunne læses (så Caspers valg ikke forsvinder).
+  const gem = () => {
+    if (!laeselig) return;
+    try {
+      const tmp = `${fil}.${process.pid}-${crypto.randomBytes(3).toString("hex")}`;
+      fs.writeFileSync(tmp, JSON.stringify(c), { mode: 0o600, flag: "wx" });
+      fs.renameSync(tmp, fil);
+    } catch { /* kun cache */ }
+  };
   let faelles;
   try { faelles = await import("../scripts/faelles.mjs"); } catch { return kendt(c.sidste) ?? FORBINDELSER_STANDARD; }
   let key = null;
   try { key = faelles.hentNoegle(); } catch { key = null; }
-  if (!key && process.env.ALEKOS_VAGT_INGEN_NOEGLERING !== "1") key = claudeCodeNoegle(); // browserloginet (0.5.7)
+  if (!key) {
+    // Browserloginet (0.5.7): er den sidste persons regler friske, læses nøgleringen slet ikke.
+    const s = post(c.sidste);
+    const gs = kendt(c.sidste);
+    if (gs && typeof s?.hentet === "number" && s.hentet <= nu && nu - s.hentet < FORBINDELSER_CACHE_MS) return gs;
+    if (process.env.ALEKOS_VAGT_INGEN_NOEGLERING !== "1") key = claudeCodeNoegle();
+  }
   if (!key) return kendt(c.sidste) ?? FORBINDELSER_STANDARD; // ikke logget ind: den sidste persons regler
   const id = crypto.createHash("sha256").update(key).digest("hex").slice(0, 24);
   const p = post(id);
@@ -144,6 +162,7 @@ async function forbindelser() {
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "alekos/forbindelser", params: {} }),
       signal: AbortSignal.timeout(4000),
+      redirect: "error",
     });
     const g = res.ok ? gyldigeRegler((await res.json())?.result) : null;
     if (g) {

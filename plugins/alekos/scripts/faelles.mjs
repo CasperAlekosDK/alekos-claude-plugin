@@ -22,7 +22,7 @@ export function gemNoegle(key, expiresAt) {
   const udloeb = Date.parse(expiresAt);
   if (!Number.isFinite(udloeb)) throw new Error("Serveren gav ingen udløbsdato.");
   const vaerdi = `${key}|${new Date(udloeb).toISOString()}`;
-  execFileSync("security", ["-i"], {
+  execFileSync("/usr/bin/security", ["-i"], {
     input: `add-generic-password -U -s ${SERVICE} -a ${KEY_ACCOUNT} -w "${vaerdi}"\n`,
     stdio: ["pipe", "ignore", "ignore"],
   });
@@ -32,7 +32,7 @@ export function gemNoegle(key, expiresAt) {
 /** Nødvejens nøgle, KUN mens den er gyldig (ellers null → browserlogin). */
 export function hentNoegle(nu = Date.now()) {
   try {
-    const out = execFileSync("security", ["find-generic-password", "-s", SERVICE, "-a", KEY_ACCOUNT, "-w"], { timeout: 3000,
+    const out = execFileSync("/usr/bin/security", ["find-generic-password", "-s", SERVICE, "-a", KEY_ACCOUNT, "-w"], { timeout: 3000,
       stdio: ["ignore", "pipe", "ignore"],
     }).toString().trim();
     const [key, udloeb] = out.split("|");
@@ -46,7 +46,7 @@ export function hentNoegle(nu = Date.now()) {
 
 function slet(account) {
   try {
-    execFileSync("security", ["delete-generic-password", "-s", SERVICE, "-a", account], { stdio: "ignore" });
+    execFileSync("/usr/bin/security", ["delete-generic-password", "-s", SERVICE, "-a", account], { stdio: "ignore" });
   } catch { /* fandtes ikke */ }
 }
 export const sletNoegle = () => slet(KEY_ACCOUNT);

@@ -33,6 +33,8 @@ for f in .docker/config.json .npmrc .zsh_history .bash_history .zhistory .pypirc
          "Library/Application Support/Google/Chrome/Default/Cookies" Library/Cookies/x Library/Keychains/x Library/Containers/x; do r "~/$f" 2; done
 r link/x 2; r ../Library/Cookies/x 2; r /x/.env.local 2; r /x/.envrc 2; r /x/.env.example 0; r src/a.ts 0
 b 'cat ~/.zsh_history | tail' 2; b 'cat ~/.npmrc' 2; b 'ls ~/Library/Application\ Support/Google/Chrome' 2
+b 'security add-generic-password -U -s "Claude Code-credentials" -w x' 2; b 'security delete-generic-password -s x' 2
+b 'security list-keychains -s /tmp/x.keychain' 2; b 'security create-keychain x' 2; b '/usr/bin/security import x' 2
 b 'curl https://x.supabase.co' 2; b 'security find-generic-password -s alekos-mcp -w' 2; b 'node "$HOME/x/headers.mjs"' 2
 chk "$(j WebFetch '{"url":"https://abc.supabase.co/x"}')" 2
 # MCP: kun alekos
@@ -175,8 +177,12 @@ nk "{\"mcpOAuth\":{\"plugin:alekos:alekos|abc\":{\"accessToken\":\"sb-ikke-amcp\
 nk "{\"mcpOAuth\":{\"plugin:alekos:alekos|a\":{\"accessToken\":\"$K43\",\"expiresAt\":2000000},\"plugin:alekos:alekos|b\":{\"accessToken\":\"$K43B\",\"expiresAt\":3000000}}}" "$K43B"
 nk '{"claudeAiOauth":{"accessToken":"x"}}' null
 nk 'null' null
-ln_=$(node -e "import('$N').then(m=>console.log(m.lagerNavn({})+'|'+m.lagerNavn({CLAUDE_CONFIG_DIR:'/x/y'})))")
-case "$ln_" in "Claude Code-credentials|Claude Code-credentials-"????????) pass=$((pass+1));; *) fail=$((fail+1)); echo "FEJL lagernavn: $ln_";; esac
+HASHXY=$(printf '%s' '/x/y' | shasum -a 256 | cut -c1-8); HASHS=$(printf '%s' '/s' | shasum -a 256 | cut -c1-8); HASHSL=$(printf '%s' '/x/y/' | shasum -a 256 | cut -c1-8)
+ln_=$(node -e "import('$N').then(m=>console.log([m.lagerNavn({}),m.lagerNavn({CLAUDE_CONFIG_DIR:'/x/y'}),m.lagerNavn({CLAUDE_CONFIG_DIR:'/x/y/'}),m.lagerNavn({CLAUDE_CONFIG_DIR:'/x/y',CLAUDE_SECURESTORAGE_CONFIG_DIR:'/s'}),m.lagerNavn({CLAUDE_CONFIG_DIR:'/x/y',CLAUDE_SECURESTORAGE_CONFIG_DIR:''})].join('|')))")
+[ "$ln_" = "Claude Code-credentials|Claude Code-credentials-$HASHXY|Claude Code-credentials-$HASHSL|Claude Code-credentials-$HASHS|Claude Code-credentials" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FEJL lagernavn: $ln_"; }
+kt=$(node -e "import('$N').then(m=>console.log(m.lagerKonto({USER:'casper'})+'|'+m.lagerKonto({USER:'søren'})+'|'+m.lagerKonto({USER:'a b'})))")
+[ "$kt" = "casper|claude-code-user|claude-code-user" ] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FEJL lagerkonto: $kt"; }
+nk "{\"mcpOAuth\":{\"plugin:alekos:alekos|abc\":{\"accessToken\":\"$K43\"}}}" null
 grep -q 'console\.\(log\|error\)' "$N" && { fail=$((fail+1)); echo "FEJL: noegle.mjs må aldrig skrive noget ud"; } || pass=$((pass+1))
 
 rm -rf "$S"
