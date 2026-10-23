@@ -47,6 +47,15 @@ export const FJERNEDE_REGLER = [
   "Edit(~/.claude/commands/**)", "Edit(**/.claude/**)",
 ];
 
+// OneDrive/SharePoint-mapperne (fx Fællesdrevet → Dokumenter til rejserne) må Claude og kommandoer skrive i, ligesom før
+// pluginet (Caspers krav 23.10.2026: "han skal arbejde i den mappe vi giver ham"). Navnet varierer pr. Mac
+// (OneDrive-AlekosRejser, OneDrive-SharedLibraries-AlekosRejser) — derfor stjernen. Fortryd ved fejl: OneDrive-versioner/papirkurv.
+export const ONEDRIVE = "~/Library/CloudStorage/OneDrive-*";
+// Kontrolfund 23.10.2026: sandkassens indbyggede forbud mod opsætningsfiler gælder kun i arbejdsmappen. I OneDrive
+// kunne en kommando ellers lægge fx .claude/settings.json (hooks, sandkasse slået fra) i Fællesdrevet, som synkes til alle
+// og køres, når en kollega starter Claude dér. Forbud vinder over allowWrite (afprøvet med sandbox-runtime).
+export const ONEDRIVE_FARLIGE = [".claude/**", ".claude.json", ".mcp.json", ".git/hooks/**", ".git/config", ".vscode/**",
+  ".husky/**", "*.code-workspace", ".idea/**", ".envrc"].map((f) => `${ONEDRIVE}/**/${f}`);
 export const GEM_VAERKTOEJ = "mcp__plugin_alekos_alekos__gem_forslag";
 
 // Markedspladsen på GitHub (offentligt repo, Caspers valg 21.10.2026). Opstartsreglen slår automatisk opdatering til,
@@ -100,6 +109,7 @@ export function regler({ ekstraMapper = [] } = {}) {
   const mapper = [...new Set(ekstraMapper.filter(Boolean).map((m) => path.resolve(m)))];
   return {
     permissions: {
+      allow: [`Edit(${ONEDRIVE}/**)`, `Read(${ONEDRIVE}/**)`],
       deny: [
         ...LAAST.map((p) => `Read(${p}/**)`),
         "Read(**/.env)",
@@ -159,7 +169,9 @@ export function regler({ ekstraMapper = [] } = {}) {
       failIfUnavailable: true,
       allowUnsandboxedCommands: false,
       // Pluginmappen og Claude Codes egen mappe: kommandoer må ikke skrive dér (rettes kun via Edit, som vagten tjekker).
-      filesystem: { denyRead: [...LAAST, ...LAAST_FILER], denyWrite: [...mapper, "~/.claude", "~/.claude.json"] },
+      filesystem: { denyRead: [...LAAST, ...LAAST_FILER], denyWrite: [...mapper, "~/.claude", "~/.claude.json", ...ONEDRIVE_FARLIGE], allowWrite: [`${ONEDRIVE}/**/*`] },
+      // ↑ "/**/*", ikke "/**": sandkassen fjerner et afsluttende "/**", og så rammer stjernen kun selve mappen — ikke
+      //   filerne i den (afprøvet med @anthropic-ai/sandbox-runtime 23.10.2026: kun "/**/*" giver skriveadgang indeni).
       // 0.4.0: kommandoer må gerne bruge internettet (Claude Code spørger første gang pr. domæne) — undtagen Supabase.
       network: { deniedDomains: ["supabase.co", "*.supabase.co"] },
     },
@@ -180,6 +192,7 @@ export function flet(nu, { konfig, ekstraMapper = [], fjernUndtagelser = true } 
   ud.permissions.deny = union(ud.permissions.deny, R.permissions.deny).filter((r) => !FJERNEDE_REGLER.includes(r));
   ud.permissions.ask = union(ud.permissions.ask, R.permissions.ask);
   ud.permissions.disableBypassPermissionsMode = "disable";
+  ud.permissions.allow = union(ud.permissions.allow, R.permissions.allow).filter((r) => !FJERNEDE_REGLER.includes(r));
   if (Array.isArray(ud.permissions.allow)) {
     // En allow på gem-værktøjet ville være død (ask vinder), men fjern den, så det er tydeligt.
     ud.permissions.allow = ud.permissions.allow.filter((r) => r !== GEM_VAERKTOEJ && !String(r).startsWith("mcp__plugin_alekos_alekos__gem"));
@@ -192,6 +205,7 @@ export function flet(nu, { konfig, ekstraMapper = [], fjernUndtagelser = true } 
   if (!erObjekt(ud.sandbox.filesystem)) ud.sandbox.filesystem = {};
   ud.sandbox.filesystem.denyRead = union(ud.sandbox.filesystem.denyRead, R.sandbox.filesystem.denyRead);
   ud.sandbox.filesystem.denyWrite = union(ud.sandbox.filesystem.denyWrite, R.sandbox.filesystem.denyWrite);
+  ud.sandbox.filesystem.allowWrite = union(ud.sandbox.filesystem.allowWrite, R.sandbox.filesystem.allowWrite).filter((r) => !FJERNEDE_REGLER.includes(r));
   // Isoleret test (CLAUDE_CONFIG_DIR): spær også testmappen og den rigtige ~/.claude for Claudes værktøjer.
   if (konfig && !erStandard(konfig)) {
     ud.permissions.deny = union(ud.permissions.deny, ["Edit(~/.claude/**)", `Edit(${absolut(konfig)}/settings.json)`, `Edit(${absolut(konfig)}/plugins/**)`]);

@@ -20,6 +20,10 @@ ok "1 gem_forslag spørger" '[ "$(felt "$K/settings.json" "\"mcp__plugin_alekos_
 ok "1 Supabase spærret" '[ "$(felt "$K/settings.json" "\"*.supabase.co\" in d[\"sandbox\"][\"network\"][\"deniedDomains\"]")" = True ]'
 ok "1 testmappen er skrivebeskyttet" '[ "$(felt "$K/settings.json" "\"$K\" in d[\"sandbox\"][\"filesystem\"][\"denyWrite\"]")" = True ]'
 ok "1 pluginets cache-mappe tilføjes ikke pr. version" '[ "$(felt "$K/settings.json" "any(\"plugins/cache\" in x for x in d[\"sandbox\"][\"filesystem\"][\"denyWrite\"])")" = False ]'
+ok "1 OneDrive skrivbar for kommandoer" '[ "$(felt "$K/settings.json" "d[\"sandbox\"][\"filesystem\"][\"allowWrite\"] == [\"~/Library/CloudStorage/OneDrive-*/**/*\"]")" = True ]'
+ok "1 OneDrive skrivbar for Edit/Write" '[ "$(felt "$K/settings.json" "\"Edit(~/Library/CloudStorage/OneDrive-*/**)\" in d[\"permissions\"][\"allow\"]")" = True ]'
+ok "1 OneDrive læsbar for Read" '[ "$(felt "$K/settings.json" "\"Read(~/Library/CloudStorage/OneDrive-*/**)\" in d[\"permissions\"][\"allow\"]")" = True ]'
+ok "1 opsætningsfiler i OneDrive spærret" '[ "$(felt "$K/settings.json" "all(\"~/Library/CloudStorage/OneDrive-*/**/\"+f in d[\"sandbox\"][\"filesystem\"][\"denyWrite\"] for f in (\".claude/**\",\".mcp.json\",\".git/hooks/**\",\".vscode/**\"))")" = True ]'
 ok "1 besked om genstart" 'printf "%s" "$out" | grep -q "er sat"'
 ok "1 ingen backup uden fil" '[ "$(nb "$K")" = 0 ]'
 

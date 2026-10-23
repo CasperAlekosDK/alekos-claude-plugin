@@ -384,6 +384,17 @@ function under(p, rod) {
   return p === r || p.startsWith(r + path.sep);
 }
 
+/** Ligger stien i (eller er) en OneDrive/SharePoint-mappe: ~/Library/CloudStorage/OneDrive-<navn>[/…]? Små/store bogstaver ens. */
+const HJEM_STAVEMAADER = [HOME];
+try { HJEM_STAVEMAADER.push(fs.realpathSync(HOME)); } catch { /* findes ikke */ }
+function iOneDrive(p) {
+  const l = path.resolve(p).toLowerCase();
+  return HJEM_STAVEMAADER.some((h) => {
+    const cs = path.join(h, "Library", "CloudStorage").toLowerCase() + path.sep;
+    return l.startsWith(cs) && /^onedrive-[^/]+/.test(l.slice(cs.length));
+  });
+}
+
 let raw = "";
 try {
   for await (const chunk of process.stdin) raw += chunk;
@@ -457,8 +468,10 @@ const erBash = tool === "Bash" || tool === "Monitor";
 if (erBash && typeof inp.command !== "string") bloker("kommando, der ikke er tekst");
 
 // Grep/Glob: ingen søgning i hjemmemappen som helhed (eller over den), og ingen søgemønstre efter browser-/nøgledata.
+// Absolutte mønstre afvises altid (også ind i OneDrive — {a,b}/[x]/? kunne gemme en genvej ud, kontrolfund 23.10.2026).
+// I OneDrive virker path = mappen + et relativt mønster, så beskeden siger det.
 if (tool === "Glob" && typeof inp.pattern === "string" && (/^\s*[\/~]|\$HOME|\$\{HOME\}/.test(inp.pattern) || inp.pattern.includes(".."))) {
-  bloker("Glob-mønster med absolut sti eller ..");
+  bloker("Glob-mønster med absolut sti eller .. (i OneDrive: brug path = mappen og et relativt mønster)");
 }
 if (tool === "Grep" && typeof inp.glob === "string" && (/^\s*[\/~]/.test(inp.glob) || inp.glob.includes(".."))) {
   bloker("Grep-filter med absolut sti eller ..");
@@ -471,7 +484,11 @@ if (tool === "Grep" || tool === "Glob") {
   const hjem = path.resolve(HOME);
   for (const r of roedder) {
     if (r === hjem || hjem.startsWith(r.endsWith(path.sep) ? r : r + path.sep)) bloker("søgning i hele hjemmemappen eller over den");
-    if (under(r, path.join(hjem, "Library"))) bloker("søgning i ~/Library");
+    // Undtagen OneDrive/SharePoint-mapperne (~/Library/CloudStorage/OneDrive-*), hvor medarbejderne arbejder (23.10.2026).
+    // Små bogstaver: realpath retter ikke "~/library/Mail" til "Library" (kontrolfund 23.10.2026).
+    const lib = path.join(hjem, "Library").toLowerCase();
+    const rl = r.toLowerCase();
+    if ((rl === lib || rl.startsWith(lib + path.sep)) && !iOneDrive(r)) bloker("søgning i ~/Library");
   }
 }
 const tekster = [];
@@ -488,7 +505,12 @@ for (const del of dele) for (const [re, navn] of STIER) if (new RegExp(re.source
 // Filværktøjer: absolutte og opløste stier.
 for (const k of ["file_path", "path", "notebook_path"]) {
   if (typeof inp[k] !== "string" || !inp[k]) continue;
-  for (const p of filstier(inp[k], cwd)) {
+  // OneDrive-tilladelsen må ikke kunne bruges som springbræt: en genvej-mappe i OneDrive, der peger ud (fx til
+  // ~/Library/LaunchAgents eller ~), giver ellers skrivning uden for OneDrive (kontrolfund 23.10.2026).
+  const fs0 = filstier(inp[k], cwd);
+  // Gælder også Read (Read-tilladelsen for OneDrive må ikke følge en genvej ud).
+  if ((SKRIVE_VAERKTOEJER.has(tool) || tool === "Read") && fs0.some(iOneDrive) && !fs0.every(iOneDrive)) bloker("genvej ud af OneDrive");
+  for (const p of fs0) {
     for (const [re, navn] of STIER) if (re.test(p)) bloker(navn);
     if (SKRIVE_VAERKTOEJER.has(tool)) {
       try { if (fs.lstatSync(p).isSymbolicLink()) bloker("skrivning gennem en genvej (symlink)"); } catch { /* findes ikke */ }

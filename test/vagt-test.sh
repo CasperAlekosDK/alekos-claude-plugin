@@ -27,6 +27,25 @@ chk "$(j Glob '{"pattern":"~/**"}')" 2; chk "$(j Glob '{"pattern":"**/*.config.t
 chk "$(j Glob '{"pattern":"**/Cookies"}')" 2; chk "$(j Grep '{"pattern":"x","glob":"**/leveldb/*"}')" 2
 chk "$(j Grep '{"pattern":"t","path":"~"}')" 2; chk "$(j Grep '{"pattern":"t","path":"/"}')" 2
 chk "$(j Glob '{"pattern":"*","path":"~/Library"}')" 2; chk "$(j Grep '{"pattern":"x","path":"src"}')" 0
+# OneDrive (23.10.2026): søgning i ~/Library/CloudStorage/OneDrive-* tilladt — ikke CloudStorage selv, ikke andre tjenester, ikke resten af Library
+chk "$(j Grep '{"pattern":"x","path":"~/Library/CloudStorage/OneDrive-AlekosRejser/Rejser"}')" 0
+chk "$(j Glob '{"pattern":"**/*.pdf","path":"~/Library/CloudStorage/OneDrive-SharedLibraries-AlekosRejser"}')" 0
+chk "$(j Grep '{"pattern":"x","path":"~/Library/CloudStorage"}')" 2; chk "$(j Grep '{"pattern":"x","path":"~/Library/CloudStorage/GoogleDrive-x"}')" 2
+chk "$(j Grep '{"pattern":"x","path":"~/Library/CloudStorage/OneDrive-x/../../Cookies"}')" 2; chk "$(j Grep '{"pattern":"x","path":"~/Library/Cookies"}')" 2
+w Write "~/Library/CloudStorage/OneDrive-AlekosRejser/Rejser/Program uge 1, 060127.pdf" 0
+# Kontrolfund 23.10.2026: genvej ud af OneDrive, absolutte Glob-mønstre, små bogstaver, opsætningsfiler i OneDrive
+mkdir -p "$S/Library/CloudStorage/OneDrive-AlekosRejser/Rejser" "$S/Library/LaunchAgents" "$S/Library/Mail"
+ln -s "$S/Library/LaunchAgents" "$S/Library/CloudStorage/OneDrive-AlekosRejser/la"; ln -s "$S" "$S/Library/CloudStorage/OneDrive-AlekosRejser/home"
+w Write "~/Library/CloudStorage/OneDrive-AlekosRejser/la/evil.plist" 2; w Write "~/Library/CloudStorage/OneDrive-AlekosRejser/home/.zshrc" 2
+w Edit "$S/Library/CloudStorage/OneDrive-AlekosRejser/Rejser/a.txt" 0
+w Write "~/Library/CloudStorage/OneDrive-AlekosRejser/Rejser/.claude/settings.json" 2; w Write "~/Library/CloudStorage/OneDrive-AlekosRejser/.mcp.json" 2
+ob="$(python3 -c 'import json;print(json.dumps({"pattern":"~/Library/CloudStorage/OneDrive-AlekosRejser/"+chr(123)+"la,Rejser"+chr(125)+"/*"}))')"; chk "$(j Glob "$ob")" 2
+od="$(python3 -c 'import json,sys;print(json.dumps({"pattern":"**/*.pdf","path":sys.argv[1]}))' "$S/Library/CloudStorage/OneDrive-AlekosRejser/Rejser")"; chk "$(j Glob "$od")" 0
+r "~/Library/CloudStorage/OneDrive-AlekosRejser/home/.zshrc" 2; r "~/Library/CloudStorage/OneDrive-AlekosRejser/Rejser/a.pdf" 0
+chk "$(j Glob '{"pattern":"~/Library/CloudStorage/OneDrive-AlekosRejser/../../Cookies/*"}')" 2
+chk "$(j Glob '{"pattern":"~/Library/CloudStorage/*/**"}')" 2; chk "$(j Glob '{"pattern":"~/Library/CloudStorage/OneDrive-AlekosRejser/la/*"}')" 2
+chk "$(j Glob '{"pattern":"~/Library/CloudStorage/OneDrive-AlekosRejser/**/Cookies"}')" 2
+chk "$(j Grep '{"pattern":"x","path":"~/library/Mail"}')" 2
 # Hemmelige filer og mapper
 for f in .docker/config.json .npmrc .zsh_history .bash_history .zhistory .pypirc .git-credentials .config/gh/hosts.yml \
          .config/x .ssh/id_ed25519 .aws/credentials .supabase/access-token .netrc Hemmeligt/x.txt \
