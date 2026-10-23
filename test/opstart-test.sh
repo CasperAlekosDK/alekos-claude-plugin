@@ -24,6 +24,9 @@ ok "1 OneDrive skrivbar for kommandoer" '[ "$(felt "$K/settings.json" "d[\"sandb
 ok "1 OneDrive skrivbar for Edit/Write" '[ "$(felt "$K/settings.json" "\"Edit(~/Library/CloudStorage/OneDrive-*/**)\" in d[\"permissions\"][\"allow\"]")" = True ]'
 ok "1 OneDrive læsbar for Read" '[ "$(felt "$K/settings.json" "\"Read(~/Library/CloudStorage/OneDrive-*/**)\" in d[\"permissions\"][\"allow\"]")" = True ]'
 ok "1 opsætningsfiler i OneDrive spærret" '[ "$(felt "$K/settings.json" "all(\"~/Library/CloudStorage/OneDrive-*/**/\"+f in d[\"sandbox\"][\"filesystem\"][\"denyWrite\"] for f in (\".claude/**\",\".mcp.json\",\".git/hooks/**\",\".vscode/**\"))")" = True ]'
+ok "1 Alekos-MCP spørger ikke" '[ "$(felt "$K/settings.json" "\"mcp__plugin_alekos_alekos__*\" in d[\"permissions\"][\"allow\"]")" = True ]'
+ok "1 Chrome spørger ikke" '[ "$(felt "$K/settings.json" "\"mcp__claude-in-chrome__*\" in d[\"permissions\"][\"allow\"]")" = True ]'
+ok "1 gem_forslag spørger stadig (ask vinder)" '[ "$(felt "$K/settings.json" "\"mcp__plugin_alekos_alekos__gem_forslag\" in d[\"permissions\"][\"ask\"] and \"mcp__plugin_alekos_alekos__gem_forslag\" not in d[\"permissions\"][\"allow\"]")" = True ]'
 ok "1 besked om genstart" 'printf "%s" "$out" | grep -q "er sat"'
 ok "1 ingen backup uden fil" '[ "$(nb "$K")" = 0 ]'
 
@@ -46,6 +49,13 @@ ok "3 plugins bevaret" '[ "$(felt "$K/settings.json" "d[\"enabledPlugins\"][\"al
 ok "3 én backup med det gamle indhold" '[ "$(nb "$K")" = 1 ] && [ "$(cat "$K"/settings.json.alekos-backup-*)" = "$foer" ]'
 ok "3 besked" 'printf "%s" "$out" | grep -q "Alekos: sikkerhedsreglerne"'
 koer "$K" "$S/h3"; ok "3b anden kørsel uændret" '[ -z "$out" ] && [ "$(nb "$K")" = 1 ]'
+
+# 3c) Gammelt Chrome-forbud fra 0.2-0.3: fjernes fra deny, men Chrome tillades
+K="$S/k3c"; mkdir -p "$K"
+printf '%s' '{"permissions":{"deny":["mcp__claude-in-chrome__*"]}}' > "$K/settings.json"; koer "$K" "$S/h3c"
+ok "3c Chrome-forbud fjernet" '[ "$(felt "$K/settings.json" "\"mcp__claude-in-chrome__*\" in d[\"permissions\"][\"deny\"]")" = False ]'
+ok "3c Chrome tilladt" '[ "$(felt "$K/settings.json" "\"mcp__claude-in-chrome__*\" in d[\"permissions\"][\"allow\"]")" = True ]'
+koer "$K" "$S/h3c"; ok "3c anden kørsel uændret" '[ -z "$out" ]'
 
 # 4) Ugyldig JSON: ændres aldrig, besked i stedet
 K="$S/k4"; mkdir -p "$K"; printf '{"a":' > "$K/settings.json"; koer "$K" "$S/h4"

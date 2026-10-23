@@ -57,6 +57,12 @@ export const ONEDRIVE = "~/Library/CloudStorage/OneDrive-*";
 export const ONEDRIVE_FARLIGE = [".claude/**", ".claude.json", ".mcp.json", ".git/hooks/**", ".git/config", ".vscode/**",
   ".husky/**", "*.code-workspace", ".idea/**", ".envrc"].map((f) => `${ONEDRIVE}/**/${f}`);
 export const GEM_VAERKTOEJ = "mcp__plugin_alekos_alekos__gem_forslag";
+// 0.5.9 (Caspers valg 23.10.2026, Alex: "den kommer virkelig tit med at jeg skal godkende"): Alekos-MCP'en og Claude in
+// Chrome spørger ikke længere ved hvert kald. Gem i Admin spørger stadig (ask på GEM_VAERKTOEJ vinder over allow;
+// gem_upload kører uden spørgsmål, men serveren lader den kun afslutte et upload, der allerede er godkendt via gem_forslag), og
+// vagten (hooks/vagt.mjs) kører før hvert Chrome-kald uanset allow — Admin/Supabase/Lovable/logins er stadig spærret.
+export const ALEKOS_MCP_REGEL = "mcp__plugin_alekos_alekos__*";
+export const TILLADT_UDEN_SPOERGSMAAL = [ALEKOS_MCP_REGEL, CHROME_REGEL];
 
 // Markedspladsen på GitHub (offentligt repo, Caspers valg 21.10.2026). Opstartsreglen slår automatisk opdatering til,
 // så nye udgaver (regler, vagt, login) kommer ud uden zip og uden at medarbejderen gør noget.
@@ -109,7 +115,7 @@ export function regler({ ekstraMapper = [] } = {}) {
   const mapper = [...new Set(ekstraMapper.filter(Boolean).map((m) => path.resolve(m)))];
   return {
     permissions: {
-      allow: [`Edit(${ONEDRIVE}/**)`, `Read(${ONEDRIVE}/**)`],
+      allow: [`Edit(${ONEDRIVE}/**)`, `Read(${ONEDRIVE}/**)`, ...TILLADT_UDEN_SPOERGSMAAL],
       deny: [
         ...LAAST.map((p) => `Read(${p}/**)`),
         "Read(**/.env)",
@@ -192,7 +198,8 @@ export function flet(nu, { konfig, ekstraMapper = [], fjernUndtagelser = true } 
   ud.permissions.deny = union(ud.permissions.deny, R.permissions.deny).filter((r) => !FJERNEDE_REGLER.includes(r));
   ud.permissions.ask = union(ud.permissions.ask, R.permissions.ask);
   ud.permissions.disableBypassPermissionsMode = "disable";
-  ud.permissions.allow = union(ud.permissions.allow, R.permissions.allow).filter((r) => !FJERNEDE_REGLER.includes(r));
+  // Chrome-reglen står i FJERNEDE_REGLER (gammelt forbud fra 0.2-0.3) — den fjernes fra deny, men må gerne stå i allow.
+  ud.permissions.allow = union(ud.permissions.allow, R.permissions.allow).filter((r) => !FJERNEDE_REGLER.includes(r) || R.permissions.allow.includes(r));
   if (Array.isArray(ud.permissions.allow)) {
     // En allow på gem-værktøjet ville være død (ask vinder), men fjern den, så det er tydeligt.
     ud.permissions.allow = ud.permissions.allow.filter((r) => r !== GEM_VAERKTOEJ && !String(r).startsWith("mcp__plugin_alekos_alekos__gem"));
