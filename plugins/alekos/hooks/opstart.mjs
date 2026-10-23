@@ -225,10 +225,11 @@ try {
 } catch (e) {
   besked(`Alekos: sikkerhedsreglerne kunne ikke sættes (${String(e?.message ?? e).slice(0, 200)}). Sikkerhedsvagten virker stadig. Ring til Casper.`);
 }
-try {
-  opdaterIBaggrunden();
-} catch { /* en fejlet opdatering må aldrig stoppe Claude Code; prøves igen om en time */ }
+// Svaret skrives før opdateringstjekket, så en langsom ps aldrig koster beskeden (kontrollantfund 23.10.2026).
 try {
   skrivSvar();
 } catch { /* svaret må aldrig stoppe Claude Code */ }
+try {
+  opdaterIBaggrunden();
+} catch { /* en fejlet opdatering må aldrig stoppe Claude Code; prøves igen om en time */ }
 process.exit(0);
