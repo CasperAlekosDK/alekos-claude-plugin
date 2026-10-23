@@ -217,6 +217,34 @@ ca navigate '{"url":"https://admin.alekos.dk/programbygger\\..\\trips","tabId":1
 ca navigate '{"url":"https://admin.alekos.dk/programbygger","tabId":1,"x":"admin.alekos.dk/trips"}' "$PB" 2
 ca computer '{"action":"type","text":"https://admin.alekos.dk/trips","tabId":1}' "$PB" 2
 ca computer '{"action":"type","text":"admin.alekos.dk/programbygger","tabId":1}' "$PB" 2
+# 0.6.1: hele Admin ("*", Caspers beslutning 23.10.2026) — undtagen /claude-forbind; samme omveje er stadig spærret
+HA='["*"]'
+ca navigate '{"url":"https://admin.alekos.dk/","tabId":1}' "$HA" 0
+ca navigate '{"url":"https://admin.alekos.dk/trips","tabId":1}' "$HA" 0
+ca navigate '{"url":"https://admin.alekos.dk/trips/0b6c1f2a-1234-4abc-9def-0123456789ab?tab=fly","tabId":1}' "$HA" 0
+ca navigate '{"url":"https://admin.alekos.dk/kundeservice","tabId":1}' "$HA" 0
+ca tabs_create_mcp '{"url":"https://admin.alekos.dk/payments"}' "$HA" 0
+ca navigate '{"url":"https://admin.alekos.dk/trips","tabId":1}' '["programbygger"]' 2
+ca navigate '{"url":"https://admin.alekos.dk/trips","tabId":1}' '[]' 2
+ca navigate '{"url":"https://admin.alekos.dk/trips","tabId":1}' '["**"]' 2
+ca navigate '{"url":"https://admin.alekos.dk/claude-forbind","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/Claude-Forbind?kode=123456","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/claude-forbind/x","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/claude-adgang","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/CLAUDE-ADGANG?tab=forbindelser","tabId":1}' "$HA" 2
+ca tabs_create_mcp '{"url":"https://admin.alekos.dk/claude-adgang/"}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/claude-upload/abc","tabId":1}' "$HA" 0
+ca navigate '{"url":"https://admin.alekos.dk/trips/../claude-forbind","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/%63laude-forbind","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk.evil.com/trips","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://x@admin.alekos.dk/trips","tabId":1}' "$HA" 2
+ca navigate '{"url":"http://admin.alekos.dk/trips","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://mit.alekos.dk/","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://media.alekos.dk/","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://rufnmcnhebhzhzzgljcs.supabase.co/rest/v1/","tabId":1}' "$HA" 2
+ca computer '{"action":"type","text":"admin.alekos.dk/trips","tabId":1}' "$HA" 2
+ca javascript_tool '{"action":"javascript_exec","text":"localStorage.getItem(\"sb-auth-token\")","tabId":1}' "$HA" 2
+ca computer '{"action":"left_click","coordinate":[10,10],"tabId":1}' "$HA" 0
 ca javascript_tool '{"action":"javascript_exec","tabId":1,"text":"localStorage"}' "$PB" 2
 
 # 0.5.7: Claude Codes eget Alekos-login (browserloginet) — kun en gyldig amcp_-nøgle for Alekos-pluginets server

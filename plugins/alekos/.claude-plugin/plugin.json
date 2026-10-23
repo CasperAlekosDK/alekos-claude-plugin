@@ -1,6 +1,6 @@
 {
   "name": "alekos",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Alekos' egen MCP-server til Admin (fly, afgange, skabeloner) med eget login og to-faktor, arbejdsregler og fagviden fra serveren og en sikkerhedsvagt, der holder Claude væk fra browserdata, nøglering og hemmeligheder.",
   "author": { "name": "Alekos Rejser ApS", "email": "casper@alekos.dk" },
   "license": "UNLICENSED",

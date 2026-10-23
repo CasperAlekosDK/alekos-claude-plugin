@@ -217,7 +217,12 @@ const CHROME_PROTOKOL = /^\s*([a-z][a-z0-9+.-]*):(?!\d)/i;
 // 0.6.0: de eneste Admin-sider, Claude in Chrome nogensinde kan få lov at åbne (serveren slår dem til/fra pr. person).
 // Programbyggeren: "PDF alle uger" til velkomstpakkerne (Caspers beslutning 23.10.2026). ÆRLIGT: Admin er én app, så
 // når siden er åben, kan Claude klikke videre i menuen — vagten stopper kun direkte adresser til andre Admin-sider.
-const ADMIN_SIDER_LOFT = ["programbygger"];
+// 0.6.1 (Caspers beslutning 23.10.2026: "de skal kunne tilgå alle sider på Admin"): "*" = hele Admin. Admin tjekker selv
+// rolle + to-faktor ved hver side og i databasen, så Claude kan kun det, personen selv kan.
+const ADMIN_SIDER_LOFT = ["programbygger", "*"];
+// Altid spærret, også med "*": /claude-forbind (et menneske godkender et nyt Claude-login — Claude må ikke godkende sit
+// eget) og /claude-adgang (Claudes egne regler — Claude må ikke løsne dem, kontrolfund 23.10.2026; kun superbrugere når siden).
+const ADMIN_ALTID_SPAERRET = ["claude-forbind", "claude-adgang"];
 /** Er adressen præcis https://admin.alekos.dk/<tilladt side>[/…][?…] (uden login i adressen, port eller omveje)? */
 function tilladtAdminSide(url, sider) {
   if (!sider.length || typeof url !== "string") return false;
@@ -228,7 +233,9 @@ function tilladtAdminSide(url, sider) {
     let u;
     try { u = new URL(t); } catch { return false; }
     if (u.protocol !== "https:" || u.hostname !== "admin.alekos.dk" || u.port || u.username || u.password) return false;
-    if (!sider.some((s) => u.pathname === `/${s}` || u.pathname.startsWith(`/${s}/`))) return false;
+    const p = u.pathname.toLowerCase();
+    if (ADMIN_ALTID_SPAERRET.some((s) => p === `/${s}` || p.startsWith(`/${s}/`))) return false;
+    if (!sider.includes("*") && !sider.some((s) => u.pathname === `/${s}` || u.pathname.startsWith(`/${s}/`))) return false;
     // Ingen omdirigering via ?-delen (fx ?next=/trips): kun enkle nøgle=værdi med bogstaver, tal og - _ .
     if (!/^(\?[a-z0-9_.=&-]*)?(#[a-z0-9_-]*)?$/i.test(u.search + u.hash)) return false;
   }
