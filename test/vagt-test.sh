@@ -102,6 +102,9 @@ chk "$(j mcp__plugin_alekos_alekos__hvem_er_jeg '{}')" 0; chk "$(j mcp__plugin_a
 c(){ chk "$(j "mcp__claude-in-chrome__$1" "$2")" "$3"; }
 c navigate '{"url":"https://www.airasia.com/da/da"}' 0; c navigate '{"url":"https://www.facebook.com/groups/123"}' 0
 c navigate '{"url":"https://alekos.dk/rejser"}' 0; c navigate '{"url":"www.alekos.dk"}' 0; c tabs_context_mcp '{}' 0
+# 0.7.2: Dinero i Chrome er tilladt (Caspers ja 23.10.2026, Noahs bankafstemning) — også selv om Dinero-MCP'en er slået fra
+c navigate '{"url":"https://app.dinero.dk/545252/bank"}' 0; c get_page_text '{"tabId":1}' 0
+c computer '{"action":"type","text":"https://app.dinero.dk/545252/bankreconciliation","tabId":1}' 0
 c navigate '{"url":"https://admin.alekos.dk/trips"}' 2; c navigate '{"url":"admin.alekos.dk"}' 2; c navigate '{"url":"https://mit.alekos.dk"}' 0
 c navigate '{"url":"https://ADMIN.Alekos.dk"}' 2; c navigate '{"url":"https://rufnmcnhebhzhzzgljcs.supabase.co/rest/v1/x"}' 2
 c navigate '{"url":"https://supabase.com/dashboard"}' 2; c navigate '{"url":"https://lovable.dev/projects/x"}' 2

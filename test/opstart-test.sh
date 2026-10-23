@@ -10,6 +10,8 @@ koer(){ # $1 = konfigmappe ("" = ingen CLAUDE_CONFIG_DIR), $2 = HOME
   rc=$?
 }
 felt(){ python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print(eval(sys.argv[2]))' "$1" "$2" 2>/dev/null; }
+# Ingen besked til personen (0.7.2: svaret har altid udgavelinjen til Claude, men ingen systemMessage).
+ingen_besked(){ printf "%s" "$out" | python3 -c 'import json,sys;d=json.load(sys.stdin);sys.exit(0 if "systemMessage" not in d and d["hookSpecificOutput"]["additionalContext"].startswith("Alekos-pluginet kører udgave ") else 1)'; }
 nb(){ ls "$1" 2>/dev/null | grep -c '^settings.json.alekos-backup-' ; }
 
 # 1) Tom opsætning: reglerne sættes, besked vises, ingen backup (der var ingen fil)
@@ -37,7 +39,7 @@ ok "1 ingen backup uden fil" '[ "$(nb "$K")" = 0 ]'
 # 2) Igen: intet ændres, ingen besked, ingen backup (idempotent)
 h1="$(shasum "$K/settings.json")"; koer "$K" "$S/h1"
 ok "2 uændret" '[ "$(shasum "$K/settings.json")" = "$h1" ]'
-ok "2 ingen besked" '[ -z "$out" ]'
+ok "2 ingen besked" 'ingen_besked'
 ok "2 ingen backup" '[ "$(nb "$K")" = 0 ]'
 
 # 3) Eksisterende indstillinger: bevares, excludedCommands og bypass fjernes, backup tages
@@ -54,14 +56,14 @@ ok "3 excludedCommands fjernet" '[ "$(felt "$K/settings.json" "\"excludedCommand
 ok "3 plugins bevaret" '[ "$(felt "$K/settings.json" "d[\"enabledPlugins\"][\"alekos@alekos-intern\"]")" = True ]'
 ok "3 én backup med det gamle indhold" '[ "$(nb "$K")" = 1 ] && [ "$(cat "$K"/settings.json.alekos-backup-*)" = "$foer" ]'
 ok "3 besked" 'printf "%s" "$out" | grep -q "Alekos: sikkerhedsreglerne"'
-koer "$K" "$S/h3"; ok "3b anden kørsel uændret" '[ -z "$out" ] && [ "$(nb "$K")" = 1 ]'
+koer "$K" "$S/h3"; ok "3b anden kørsel uændret" 'ingen_besked && [ "$(nb "$K")" = 1 ]'
 
 # 3c) Gammelt Chrome-forbud fra 0.2-0.3: fjernes fra deny, men Chrome tillades
 K="$S/k3c"; mkdir -p "$K"
 printf '%s' '{"permissions":{"deny":["mcp__claude-in-chrome__*"]}}' > "$K/settings.json"; koer "$K" "$S/h3c"
 ok "3c Chrome-forbud fjernet" '[ "$(felt "$K/settings.json" "\"mcp__claude-in-chrome__*\" in d[\"permissions\"][\"deny\"]")" = False ]'
 ok "3c Chrome tilladt" '[ "$(felt "$K/settings.json" "\"mcp__claude-in-chrome__*\" in d[\"permissions\"][\"allow\"]")" = True ]'
-koer "$K" "$S/h3c"; ok "3c anden kørsel uændret" '[ -z "$out" ]'
+koer "$K" "$S/h3c"; ok "3c anden kørsel uændret" 'ingen_besked'
 
 # 4) Ugyldig JSON: ændres aldrig, besked i stedet
 K="$S/k4"; mkdir -p "$K"; printf '{"a":' > "$K/settings.json"; koer "$K" "$S/h4"
@@ -85,7 +87,7 @@ ok "6 højst 5 backups" '[ "$(nb "$K")" = 5 ]'
 if [ "$(id -un)" = "casperkloster" ]; then
   H="$S/caspershjem"; mkdir -p "$H/.claude"; echo '{"x":1}' > "$H/.claude/settings.json"; koer "" "$H"
   ok "7 Caspers settings uændret" '[ "$(cat "$H/.claude/settings.json")" = "{\"x\":1}" ]'
-  ok "7 ingen besked, ingen backup" '[ -z "$out" ] && [ "$(nb "$H/.claude")" = 0 ]'
+  ok "7 ingen besked, ingen backup" 'ingen_besked && [ "$(nb "$H/.claude")" = 0 ]'
   H2="$S/tomt"; mkdir -p "$H2"; koer "" "$H2"
   ok "7b opretter ikke ~/.claude/settings.json" '[ ! -e "$H2/.claude/settings.json" ]'
 else
@@ -178,6 +180,14 @@ ok "16 mærkefil som link: målet urørt, ingen opdatering" '[ "$(cat "$S/maal")
 rm -f "$K/.alekos-opdateret"; mkdir "$K/.alekos-opdaterer.laas"; start "$S/bin/claude"; sleep 0.5
 ok "16 lås holdt: ingen anden opdatering" '[ ! -e "$S/kald.log" ]'
 rmdir "$K/.alekos-opdaterer.laas"
+
+# 17) 0.7.2: Claude får altid den kørende udgave; besked + udgave er ét gyldigt JSON-svar
+V="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["version"])' "$(dirname "$O")/../.claude-plugin/plugin.json")"
+K="$S/k17"; mkdir -p "$K"; koer "$K" "$S/h17"
+ok "17 første start: ét JSON-svar med besked OG udgave" 'printf "%s" "$out" | python3 -c "import json,sys;d=json.load(sys.stdin);c=d[\"hookSpecificOutput\"][\"additionalContext\"];sys.exit(0 if \"er sat\" in d[\"systemMessage\"] and \"Alekos-pluginet kører udgave $V \" in c and c.startswith(\"Besked fra Alekos-pluginet\") else 1)"'
+koer "$K" "$S/h17"
+ok "17 anden start: kun udgaven til Claude, ingen besked til personen" 'ingen_besked && printf "%s" "$out" | grep -q "kører udgave $V "'
+ok "17 udgaven er den i plugin.json (x.y.z)" 'printf "%s" "$V" | grep -Eq "^[0-9]+\.[0-9]+\.[0-9]+$"'
 
 rm -rf "$S"
 echo "bestået $pass, fejl $fail"

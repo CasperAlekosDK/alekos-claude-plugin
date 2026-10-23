@@ -20,12 +20,26 @@ const MAKS_BACKUPS = 5;
 const LAAS = ".alekos-opstart.laas";
 
 // systemMessage vises for personen; additionalContext går til Claude, så den selv beder om genstart (VS Code kan
-// skjule hook-beskeder — kontrollantfund 21.10.2026).
+// skjule hook-beskeder — kontrollantfund 21.10.2026). Hook-svaret må kun være ét JSON-objekt — det skrives i bunden.
+let personBesked = null;
 function besked(tekst) {
-  process.stdout.write(JSON.stringify({
-    systemMessage: tekst,
-    hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: `Besked fra Alekos-pluginet til medarbejderen (sig den med det samme, kort): ${tekst}` },
-  }));
+  personBesked = tekst;
+}
+
+/** Udgaven, der kører (0.7.2, Noahs ønske 23.10.2026: Claude kunne ikke se, om pluginet var opdateret). */
+function koerendeUdgave() {
+  const v = laes(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".claude-plugin", "plugin.json"))?.version;
+  return typeof v === "string" && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v) ? v : "ukendt";
+}
+
+function skrivSvar() {
+  const udgave = `Alekos-pluginet kører udgave ${koerendeUdgave()} (nyeste udgave står i hvem_er_jeg under udgaver.plugin_nyeste; nævn den kun, hvis medarbejderen spørger, eller hvis den kørende er ældre).`;
+  const svar = { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: udgave } };
+  if (personBesked) {
+    svar.systemMessage = personBesked;
+    svar.hookSpecificOutput.additionalContext = `Besked fra Alekos-pluginet til medarbejderen (sig den med det samme, kort): ${personBesked}\n${udgave}`;
+  }
+  process.stdout.write(JSON.stringify(svar));
 }
 
 const inde = (mappe, sti) => {
@@ -214,4 +228,7 @@ try {
 try {
   opdaterIBaggrunden();
 } catch { /* en fejlet opdatering må aldrig stoppe Claude Code; prøves igen om en time */ }
+try {
+  skrivSvar();
+} catch { /* svaret må aldrig stoppe Claude Code */ }
 process.exit(0);
