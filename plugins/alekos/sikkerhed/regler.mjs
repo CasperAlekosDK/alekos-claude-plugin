@@ -45,6 +45,8 @@ const CHROME_REGEL = "mcp__claude-in-chrome__*";
 export const FJERNEDE_REGLER = [
   CHROME_REGEL, ...GAMLE_MCP_REGLER, "Edit(~/.claude/CLAUDE.md)", "Edit(~/.claude/skills/**)", "Edit(~/.claude/agents/**)",
   "Edit(~/.claude/commands/**)", "Edit(**/.claude/**)",
+  // 0.7.0 (Caspers krav 23.10.2026): åbne filer og programmer er tilladt igen.
+  "Bash(osascript *)", "Bash(open *)", "Bash(/usr/bin/open *)", "Bash(osacompile *)",
 ];
 
 // OneDrive/SharePoint-mapperne (fx Fællesdrevet → Dokumenter til rejserne) må Claude og kommandoer skrive i, ligesom før
@@ -56,6 +58,13 @@ export const ONEDRIVE = "~/Library/CloudStorage/OneDrive-*";
 // og køres, når en kollega starter Claude dér. Forbud vinder over allowWrite (afprøvet med sandbox-runtime).
 export const ONEDRIVE_FARLIGE = [".claude/**", ".claude.json", ".mcp.json", ".git/hooks/**", ".git/config", ".vscode/**",
   ".husky/**", "*.code-workspace", ".idea/**", ".envrc"].map((f) => `${ONEDRIVE}/**/${f}`);
+// 0.7.0 (Caspers krav 23.10.2026): kommandoer må også skrive på Skrivebordet, i Overførsler og i Dokumenter.
+export const SKRIVBARE = ["~/Desktop/**/*", "~/Downloads/**/*", "~/Documents/**/*"];
+// Samme forbud mod opsætningsfiler, der kører uden sandkasse, som i OneDrive (kontrolfund 23.10.2026: ellers kunne en
+// kommando lægge fx ~/Documents/x/.claude/settings.json med hooks eller .vscode/tasks.json, der kører ved åbning).
+export const SKRIVBARE_FARLIGE = ["~/Desktop", "~/Downloads", "~/Documents"].flatMap((m) =>
+  [".claude/**", ".claude.json", ".mcp.json", ".git/hooks/**", ".git/config", ".vscode/**", ".husky/**", "*.code-workspace",
+    ".idea/**", ".envrc", "*.command", "*.tool", "*.workflow/**"].map((f) => `${m}/**/${f}`));
 export const GEM_VAERKTOEJ = "mcp__plugin_alekos_alekos__gem_forslag";
 // 0.5.9 (Caspers valg 23.10.2026, Alex: "den kommer virkelig tit med at jeg skal godkende"): Alekos-MCP'en og Claude in
 // Chrome spørger ikke længere ved hvert kald. Gem i Admin spørger stadig (ask på GEM_VAERKTOEJ vinder over allow;
@@ -158,24 +167,19 @@ export function regler({ ekstraMapper = [] } = {}) {
         "Bash(security default-keychain *)",
         "Bash(curl *supabase.co*)",
         "Bash(wget *supabase.co*)",
-        "Bash(osascript *)",
-        "Bash(open *)",
-        "Bash(/usr/bin/open *)",
-        "Bash(osacompile *)",
         "WebFetch(domain:supabase.co)",
         "WebFetch(domain:*.supabase.co)",
         ...FARLIGE_MCP,
       ],
       ask: [GEM_VAERKTOEJ],
-      // Ingen "spring alle godkendelser over" (så gem_forslag altid spørger, også fra en agent).
-      disableBypassPermissionsMode: "disable",
     },
     sandbox: {
       enabled: true,
       failIfUnavailable: true,
-      allowUnsandboxedCommands: false,
+      // 0.7.0: en kommando, der ikke kan køre i sandkassen, må køre udenfor, når medarbejderen siger ja.
+      allowUnsandboxedCommands: true,
       // Pluginmappen og Claude Codes egen mappe: kommandoer må ikke skrive dér (rettes kun via Edit, som vagten tjekker).
-      filesystem: { denyRead: [...LAAST, ...LAAST_FILER], denyWrite: [...mapper, "~/.claude", "~/.claude.json", ...ONEDRIVE_FARLIGE], allowWrite: [`${ONEDRIVE}/**/*`] },
+      filesystem: { denyRead: [...LAAST, ...LAAST_FILER], denyWrite: [...mapper, "~/.claude", "~/.claude.json", ...ONEDRIVE_FARLIGE, ...SKRIVBARE_FARLIGE], allowWrite: [`${ONEDRIVE}/**/*`, ...SKRIVBARE] },
       // ↑ "/**/*", ikke "/**": sandkassen fjerner et afsluttende "/**", og så rammer stjernen kun selve mappen — ikke
       //   filerne i den (afprøvet med @anthropic-ai/sandbox-runtime 23.10.2026: kun "/**/*" giver skriveadgang indeni).
       // 0.4.0: kommandoer må gerne bruge internettet (Claude Code spørger første gang pr. domæne) — undtagen Supabase.
@@ -197,18 +201,18 @@ export function flet(nu, { konfig, ekstraMapper = [], fjernUndtagelser = true } 
   if (!erObjekt(ud.permissions)) ud.permissions = {};
   ud.permissions.deny = union(ud.permissions.deny, R.permissions.deny).filter((r) => !FJERNEDE_REGLER.includes(r));
   ud.permissions.ask = union(ud.permissions.ask, R.permissions.ask);
-  ud.permissions.disableBypassPermissionsMode = "disable";
+  // 0.7.0: "spring godkendelser over" er tilladt igen — fjern kun vores egen gamle spærring.
+  if (ud.permissions.disableBypassPermissionsMode === "disable") delete ud.permissions.disableBypassPermissionsMode;
   // Chrome-reglen står i FJERNEDE_REGLER (gammelt forbud fra 0.2-0.3) — den fjernes fra deny, men må gerne stå i allow.
   ud.permissions.allow = union(ud.permissions.allow, R.permissions.allow).filter((r) => !FJERNEDE_REGLER.includes(r) || R.permissions.allow.includes(r));
   if (Array.isArray(ud.permissions.allow)) {
     // En allow på gem-værktøjet ville være død (ask vinder), men fjern den, så det er tydeligt.
     ud.permissions.allow = ud.permissions.allow.filter((r) => r !== GEM_VAERKTOEJ && !String(r).startsWith("mcp__plugin_alekos_alekos__gem"));
   }
-  if (ud.permissions.defaultMode === "bypassPermissions") delete ud.permissions.defaultMode;
   if (!erObjekt(ud.sandbox)) ud.sandbox = {};
   ud.sandbox.enabled = true;
   ud.sandbox.failIfUnavailable = true;
-  ud.sandbox.allowUnsandboxedCommands = false;
+  ud.sandbox.allowUnsandboxedCommands = true;
   if (!erObjekt(ud.sandbox.filesystem)) ud.sandbox.filesystem = {};
   ud.sandbox.filesystem.denyRead = union(ud.sandbox.filesystem.denyRead, R.sandbox.filesystem.denyRead);
   ud.sandbox.filesystem.denyWrite = union(ud.sandbox.filesystem.denyWrite, R.sandbox.filesystem.denyWrite);

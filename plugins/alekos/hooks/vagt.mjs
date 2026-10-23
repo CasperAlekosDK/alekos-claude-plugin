@@ -44,6 +44,11 @@ const STIER = [
 ];
 
 const BASH = [
+  // 0.7.0: open må åbne filer og programmer (PDF, Excel, Preview …), men aldrig køre scripts eller åbne en terminal —
+  // det kører uden for sandkassen (kontrolfund 23.10.2026). osascript kan styre alle programmer og forbliver spærret.
+  [/osascript|osacompile/i, "osascript (kan styre alle programmer uden sandkasse)"],
+  [/\bosa\w*\$|\$\{?\w*\}?script\b|\$\{?\w*\}?compile\b/i, "sammensat osascript-kommando"],
+  [/\bopen\b[^\n|;&]*(\.(command|sh|zsh|bash|tool|app|terminal|scpt|applescript|workflow|pkg|dmg|py|js|rb|pl)\b|-a\s+["']?(terminal|iterm|script editor|automator))/i, "open af et script, en app-pakke eller en terminal"],
   [/\bsecurity\b[^\n|;&]*(find-|add-|delete-|set-|dump-keychain|export|import|unlock-keychain|create-keychain|list-keychains|default-keychain|login-keychain|\s-i\b)/i, "nøgleringen (security)"],
   [/supabase\.(co|in|com)\b/i, "direkte kald til Supabase"],
   [/\b(headers|login|faelles)\.mjs\b/i, "Alekos' login-/nøglescripts"],
@@ -51,9 +56,6 @@ const BASH = [
   [/local storage|leveldb|indexeddb|cookies\.binarycookies|login data|web data/i, "browserens lagrede data"],
   [/(^|[\s"'=\/])\.claude(\.json)?(\/|\s|"|'|$)/im, "Claude Codes indstillinger"],
   [/(^|[\s"'=\/])\.mcp\.json\b/i, "MCP-opsætning (.mcp.json)"],
-  [/osascript|osacompile|\/usr\/bin\/open\b/i, "osascript/open (kan styre browser og andre programmer)"],
-  [/\bosa\w*\$|\$\{?\w*\}?script\b|\$\{?\w*\}?compile\b/i, "sammensat osascript-kommando"],
-  [/(^|[;&|\n(`{]|\bthen|\bdo|\belse|\bxargs|\bexec|\benv|\bsudo|\bcommand|\bnohup|\btime)\s*(\w+=\S*\s+)*["']?open["']?(\s|$)/im, "open (kan åbne og styre programmer)"],
   [/\.git\/hooks|\.husky\b|\.vscode\/(tasks|settings|launch)\.json|\.code-workspace\b/i, "git-hooks/VS Code-opsætning (kode der kører uden sandkasse)"],
 ];
 
@@ -64,7 +66,7 @@ const SOEGEORD = /library|cookies|leveldb|keychains?|\.ssh|local storage|indexed
 
 // Andre forbindelser. Casper styrer ALT fra Admin → Claude-adgang (serveren sender reglerne). Herunder kun nødlisten,
 // når der aldrig har været et svar fra serveren (Supabase, Dinero, Lovable, databaser + fil-/browser-/terminal-/editor-styring).
-const ALTID_SPAERRET_NOED = /filesystem|file[-_]?system|desktop[-_]?commander|playwright|puppeteer|chrome[-_]?devtools|devtools|claude[-_]?vscode|vscode|^ide$|jetbrains|computer[-_]?use|browserbase|browser[-_]?use|shell|terminal|exec|ssh|docker|kubernetes/i;
+const ALTID_SPAERRET_NOED = /filesystem|file[-_]?system|desktop[-_]?commander|playwright|puppeteer|chrome[-_]?devtools|devtools|computer[-_]?use|browserbase|browser[-_]?use|shell|terminal|exec|ssh|docker|kubernetes/i;
 // Standarden, hvis serveren ikke kan svare (samme som _shared/alekosMcpForbindelser.ts i Admin: Dinero, Lovable og
 // databaser spærret, resten tilladt). Bruges også, hvis personen ikke er logget ind på Alekos-MCP'en.
 const FORBINDELSER_STANDARD = {
@@ -203,12 +205,12 @@ const CHROME_KENDTE = new Set([
 ]);
 // Netværkstrafik kan indeholde login-headere; browserskift kan nå en profil med Admin; genveje kører ukendte trin.
 // Konsollen kan vise logins, som en side skriver ud.
-const CHROME_SPAERRET = new Set(["read_network_requests", "read_console_messages", "switch_browser", "select_browser", "shortcuts_execute"]);
+// 0.7.0 (Caspers krav 23.10.2026: "det er noget de skal kunne alt sammen"): ingen Chrome-værktøjer spærret.
+const CHROME_SPAERRET = new Set([]);
 // Medarbejdersystemer med login, Supabase og Lovable — også når navnet står i tekst, der skrives eller køres.
 // (Adressefelter er strengere: der spærres alle alekos.dk-undersider undtagen www, se tjekChromeUrl. I fritekst må fx
 // "mit.alekos.dk" gerne stå, så opslag til holdet kan henvise til Mit Alekos.)
 const CHROME_SIDER = [
-  [/(^|[^a-z0-9.-])([a-z0-9-]+\.)*(admin|vf-system|media|coolify|studio|api)\.alekos\.dk(?![a-z0-9-])/i, "Alekos' systemer (admin.alekos.dk m.fl.)"],
   [/supabase\.(co|com|in)\b/i, "Supabase"],
   [/lovable(project)?\.(dev|app|com)\b/i, "Lovable"],
 ];
@@ -286,7 +288,11 @@ function tjekChromeUrl(url, ekstra = []) {
   let vaert = "";
   try { vaert = new URL(m ? u : `https://${u}`).hostname.toLowerCase().replace(/\.+$/, ""); } catch { bloker("ugyldig adresse i browseren"); }
   const sider = /(^|\.)(supabase\.(co|com|in)|lovable\.(dev|app)|lovableproject\.com)$/;
-  if ((vaert.endsWith(".alekos.dk") && vaert !== "www.alekos.dk") || sider.test(vaert)) {
+  // 0.7.0: Mit Alekos, VF, Media og de andre alekos.dk-sider er åbne — medarbejderne bruger dem selv i dag. Admin følger
+  // kontakten i Claude-adgang (0.6.1: "*" = hele Admin, standard Til) og er aldrig åben på /claude-forbind og /claude-adgang;
+  // en tilladt Admin-adresse er allerede godkendt i tjekChrome og når ikke hertil.
+  if (vaert === "admin.alekos.dk") bloker("denne side i Admin er ikke slået til for dig (Admin → Claude-adgang)");
+  if (sider.test(vaert)) {
     bloker(`${vaert} i browseren (brug Alekos-MCP'en til Admin)`);
   }
   tjekServerSider([vaert], ekstra, true);
@@ -311,18 +317,8 @@ function tjekChrome(navn, input, ekstra = [], sider = []) {
   const adminOk = (navn === "navigate" || navn === "tabs_create_mcp") && tilladtAdminSide(input.url, sider);
   const alt = chromeTekst(JSON.stringify(adminOk ? { ...input, url: "" } : input));
   for (const [re, hvad] of CHROME_SIDER) if (re.test(alt)) bloker(`${hvad} i browseren (brug Alekos-MCP'en til Admin)`);
-  if (ekstra.length) {
-    if (alt.length > MAKS_CHROME_TEKST) bloker("meget lang tekst i browseren (del den op)");
-    tjekServerSider(alt.match(VAERTER_I_TEKST) ?? [], ekstra, false);
-  }
+  if (ekstra.length && alt.length <= MAKS_CHROME_TEKST) tjekServerSider(alt.match(VAERTER_I_TEKST) ?? [], ekstra, false);
   if (typeof input.url === "string" && !adminOk) tjekChromeUrl(chromeTekst(input.url), ekstra);
-  if (navn === "computer" && input.action === "key" && CHROME_TASTER.test(String(input.text ?? ""))) {
-    bloker("genvej til adresselinjen, ny fane eller nyt vindue (brug navigate)");
-  }
-  if (navn === "javascript_tool") {
-    const js = String(input.text ?? "");
-    if (CHROME_JS.test(js) || CHROME_JS.test(chromeTekst(js))) bloker("JavaScript, der læser lagrede logins, navigerer væk eller er skjult");
-  }
   if ("paths" in input && !Array.isArray(input.paths)) bloker("filupload uden liste over filer");
   for (const p of Array.isArray(input.paths) ? input.paths : []) {
     if (typeof p !== "string") bloker("filupload med ugyldig sti");
@@ -453,6 +449,10 @@ const cwd = typeof data.cwd === "string" ? data.cwd : process.cwd();
 
 // Claude in Chrome (0.3.0): tilladt til flybookingsider og Facebook — KUN i en Chrome-profil uden Admin-login (guiden).
 // Vagten spærrer det, der kan hente en login-nøgle, hvis profilen alligevel er logget ind et sted.
+// 0.7.0: VS Code/IDE-forbindelsen må bruges (diagnostik, diff), men ikke til at køre kode eller terminal uden sandkasse.
+if (/^mcp__(ide|claude-vscode|jetbrains|plugin_[a-z0-9_-]*jetbrains[a-z0-9_-]*)__[a-z0-9_]*(execute|run|terminal|command|shell)/i.test(tool)) {
+  bloker("kørsel af kode/terminal via editoren (brug Bash, som kører i sandkassen)");
+}
 if (CHROME.test(tool)) {
   // Serverens liste (0.5.6) oveni den faste lokale bund; svarer serveren ikke, gælder sidst kendte/den lokale bund.
   let ekstra = [];
@@ -505,23 +505,51 @@ if (["ReadMcpResourceTool", "ReadMcpResourceDirTool", "ListMcpResourcesTool"].in
 const erBash = tool === "Bash" || tool === "Monitor";
 if (erBash && typeof inp.command !== "string") bloker("kommando, der ikke er tekst");
 
-// Grep/Glob: ingen søgning i hjemmemappen som helhed (eller over den), og ingen søgemønstre efter browser-/nøgledata.
-// Absolutte mønstre afvises altid (også ind i OneDrive — {a,b}/[x]/? kunne gemme en genvej ud, kontrolfund 23.10.2026).
-// I OneDrive virker path = mappen + et relativt mønster, så beskeden siger det.
-if (tool === "Glob" && typeof inp.pattern === "string" && (/^\s*[\/~]|\$HOME|\$\{HOME\}/.test(inp.pattern) || inp.pattern.includes(".."))) {
-  bloker("Glob-mønster med absolut sti eller .. (i OneDrive: brug path = mappen og et relativt mønster)");
-}
-if (tool === "Grep" && typeof inp.glob === "string" && (/^\s*[\/~]/.test(inp.glob) || inp.glob.includes(".."))) {
-  bloker("Grep-filter med absolut sti eller ..");
+// Grep/Glob (0.7.0, Caspers krav 23.10.2026): søgning med fuld sti og fra hjemmemappen er tilladt (fx "find filen, jeg
+// lige har hentet") — men aldrig ned i ~/Library eller skjulte mapper (~/.ssh, ~/.config …) og aldrig over hjemmemappen.
+// Et fuldt mønster deles i den faste del (= hvor der søges fra) og resten, så "~/Lib*/…" ikke slipper forbi.
+const GLOB_TEGN = /[*?[\]{}]/;
+/** Kan glob-delen (ét mappenavn) ramme navnet? {a,b}, [x], *, ? oversættes; alt andet skal passe præcist. */
+function globKanRamme(del, navn) {
+  let re = "";
+  for (let i = 0; i < del.length; i++) {
+    const t = del[i];
+    if (t === "*") re += ".*";
+    else if (t === "?") re += ".";
+    else if (t === "[") { const j = del.indexOf("]", i + 1); if (j < 0) return true; re += `[${del.slice(i + 1, j).replace(/^!/, "^").replace(/\\/g, "\\\\")}]`; i = j; }
+    else if (t === "{") { const j = del.indexOf("}", i + 1); if (j < 0) return true; re += `(${del.slice(i + 1, j).split(",").map((x) => x.replace(/[.+^$()|\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")).join("|")})`; i = j; }
+    else re += t.replace(/[.+^$()|\\]/g, "\\$&");
+  }
+  try { return new RegExp(`^${re}$`, "i").test(navn); } catch { return true; }
 }
 if (tool === "Grep" || tool === "Glob") {
   for (const k of ["pattern", "glob"]) if (typeof inp[k] === "string" && SOEGEORD.test(inp[k])) bloker("søgning efter browser-/nøgledata");
-  const rod = path.resolve(cwd, normaliser(typeof inp.path === "string" && inp.path ? inp.path : "."));
+  let sti = typeof inp.path === "string" && inp.path ? inp.path : ".";
+  let moenster = tool === "Glob" && typeof inp.pattern === "string" ? inp.pattern.trim() : "";
+  if (/^[\/~]|\$HOME|\$\{HOME\}/.test(moenster)) {
+    // Fuldt mønster: den faste del er stedet, der søges fra.
+    const dele0 = normaliser(moenster).split("/");
+    const i = dele0.findIndex((d) => GLOB_TEGN.test(d));
+    sti = i < 0 ? dele0.join("/") : dele0.slice(0, i).join("/") || "/";
+    moenster = i < 0 ? "" : dele0.slice(i).join("/");
+  }
+  if ([inp.glob, moenster].some((x) => typeof x === "string" && x.split("/").includes(".."))) bloker("søgemønster med ..");
+  const rod = path.resolve(cwd, normaliser(sti));
   const roedder = [rod];
   try { roedder.push(fs.realpathSync(rod)); } catch { /* findes ikke */ }
   const hjem = path.resolve(HOME);
   for (const r of roedder) {
-    if (r === hjem || hjem.startsWith(r.endsWith(path.sep) ? r : r + path.sep)) bloker("søgning i hele hjemmemappen eller over den");
+    const over = r !== hjem && hjem.startsWith(r.endsWith(path.sep) ? r : r + path.sep);
+    if (over) bloker("søgning over hjemmemappen (søg fx i ~/Downloads eller ~/Documents)");
+    if (r === hjem) {
+      // Grep fra hjemmemappen går i alle undermapper, også ~/Library — vælg en mappe.
+      if (tool === "Grep") bloker("Grep i hele hjemmemappen (vælg en mappe, fx ~/Downloads eller ~/Documents)");
+      const foerste = (moenster || "*").split("/")[0];
+      const fredet = ["Library", ".ssh", ".config", ".aws", ".docker", ".supabase", ".mozilla", ".claude", "Hemmeligt", ".gnupg"];
+      if (foerste === "**" || fredet.some((n) => globKanRamme(foerste, n))) {
+        bloker("søgning, der kan nå ~/Library eller skjulte mapper (søg fx i ~/Downloads eller ~/Documents)");
+      }
+    }
     // Undtagen OneDrive/SharePoint-mapperne (~/Library/CloudStorage/OneDrive-*), hvor medarbejderne arbejder (23.10.2026).
     // Små bogstaver: realpath retter ikke "~/library/Mail" til "Library" (kontrolfund 23.10.2026).
     const lib = path.join(hjem, "Library").toLowerCase();

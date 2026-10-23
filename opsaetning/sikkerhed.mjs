@@ -27,7 +27,7 @@ const PLUGIN_MAPPE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const KORT = `
 Du siger ja til tre ting:
   1. Claude må aldrig læse din browsers filer, din nøglering, ~/.ssh, ~/Hemmeligt eller .env-filer, og må ikke ændre Claude Codes indstillinger.
-     Claude in Chrome må bruges — men KUN i Chrome-profilen "Alekos arbejde", hvor du aldrig logger ind i Admin.
+     Claude in Chrome må bruges i Chrome-profilen "Alekos arbejde" (ikke til Supabase eller Lovable).
   2. Kommandoer, Claude kører, sker i en sandkasse uden adgang til dine private filer og uden Supabase
      (første gang en kommando vil på internettet, spørger Claude Code dig).
   3. Claude Code spørger dig HVER gang, før noget gemmes i Admin. Klik aldrig "altid tillad" der.

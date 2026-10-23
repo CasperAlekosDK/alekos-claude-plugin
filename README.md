@@ -47,19 +47,11 @@ Skriv til Claude: **"Kald værktøjet hvem_er_jeg"** (en test, der viser, at du 
 så godkend. Svaret viser din e-mail, og hvad Claude må pr. område.
 Prøv derefter fx: "Vis flyplanen for 131026".
 
-## 4. Chrome til fly og Facebook
+## 4. Chrome
 
-Claude in Chrome er tilladt, men **kun i en separat Chrome-profil, hvor du aldrig logger ind i Admin** (admin.alekos.dk),
-Supabase eller Lovable.
-
-1. Chrome → profilikonet øverst til højre → **Tilføj** → kald profilen **Alekos arbejde**.
-2. Installér udvidelsen **Claude in Chrome** i den nye profil. Log ind på Facebook og flyselskaberne dér.
-3. I din gamle profil (den med Admin): højreklik på Claude-udvidelsen → **Fjern fra Chrome**.
-4. Log aldrig ind i Admin i "Alekos arbejde".
-
-Hvorfor: i en profil med Admin-login ligger login-nøglen i browseren, og Claude kan køre JavaScript på siden. Så kunne
-Claude gøre alt, du kan i Admin, uden om forslag, godkendelse og log. Sikkerhedsvagten blokerer desuden, at Claude
-åbner admin.alekos.dk og andre alekos.dk-undersider (alekos.dk og www.alekos.dk er tilladt), Supabase og Lovable.
+Claude in Chrome bruges i Chrome-profilen **Alekos arbejde**. Log ind dér på det, du selv bruger (Admin, VF, Media,
+Facebook, flyselskaberne). Claude kan bruge de samme sider som dig — undtagen Supabase og Lovable, som vagten spærrer.
+Gem i Admin går helst via Alekos-MCP'en, så det bliver logget og kan fortrydes (Caspers beslutning 23.10.2026, plugin 0.7.0).
 
 ## 5. Rettelser i Admin
 
