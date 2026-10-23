@@ -57,14 +57,16 @@ export const ONEDRIVE = "~/Library/CloudStorage/OneDrive-*";
 // kunne en kommando ellers lægge fx .claude/settings.json (hooks, sandkasse slået fra) i Fællesdrevet, som synkes til alle
 // og køres, når en kollega starter Claude dér. Forbud vinder over allowWrite (afprøvet med sandbox-runtime).
 export const ONEDRIVE_FARLIGE = [".claude/**", ".claude.json", ".mcp.json", ".git/hooks/**", ".git/config", ".vscode/**",
-  ".husky/**", "*.code-workspace", ".idea/**", ".envrc"].map((f) => `${ONEDRIVE}/**/${f}`);
+  ".husky/**", "*.code-workspace", ".idea/**", ".envrc", ".git"].map((f) => `${ONEDRIVE}/**/${f}`);
+// 0.7.1: selve .git-mappen er spærret (kontrolfund 23.10.2026, afprøvet med sandbox-runtime): ellers kan
+// "mv .git gx; skriv gx/hooks/…; mv gx .git" lægge en git-hook ind, der senere kører uden sandkasse og uden spørgsmål.
 // 0.7.0 (Caspers krav 23.10.2026): kommandoer må også skrive på Skrivebordet, i Overførsler og i Dokumenter.
 export const SKRIVBARE = ["~/Desktop/**/*", "~/Downloads/**/*", "~/Documents/**/*"];
 // Samme forbud mod opsætningsfiler, der kører uden sandkasse, som i OneDrive (kontrolfund 23.10.2026: ellers kunne en
 // kommando lægge fx ~/Documents/x/.claude/settings.json med hooks eller .vscode/tasks.json, der kører ved åbning).
 export const SKRIVBARE_FARLIGE = ["~/Desktop", "~/Downloads", "~/Documents"].flatMap((m) =>
   [".claude/**", ".claude.json", ".mcp.json", ".git/hooks/**", ".git/config", ".vscode/**", ".husky/**", "*.code-workspace",
-    ".idea/**", ".envrc", "*.command", "*.tool", "*.workflow/**"].map((f) => `${m}/**/${f}`));
+    ".idea/**", ".envrc", "*.command", "*.tool", "*.workflow/**", ".git"].flatMap((f) => [`${m}/**/${f}`, `${m}/${f}`]));
 export const GEM_VAERKTOEJ = "mcp__plugin_alekos_alekos__gem_forslag";
 // 0.5.9 (Caspers valg 23.10.2026, Alex: "den kommer virkelig tit med at jeg skal godkende"): Alekos-MCP'en og Claude in
 // Chrome spørger ikke længere ved hvert kald. Gem i Admin spørger stadig (ask på GEM_VAERKTOEJ vinder over allow;

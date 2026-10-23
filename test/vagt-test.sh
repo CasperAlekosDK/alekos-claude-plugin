@@ -287,5 +287,13 @@ nk "{\"mcpOAuth\":{\"plugin:alekos:alekos|abc\":{\"accessToken\":\"$K43\"}}}" nu
 grep -q 'console\.\(log\|error\)' "$N" && { fail=$((fail+1)); echo "FEJL: noegle.mjs må aldrig skrive noget ud"; } || pass=$((pass+1))
 
 rm -rf "$S"
+# 0.7.1: /claude-forbind og /claude-adgang i al Chrome-tekst og JS (også pushState/links); almindelig tekst er fri
+HA='["*"]'
+ca javascript_tool '{"action":"javascript_exec","text":"history.pushState({},\"\",\"/claude-forbind\")","tabId":1}' "$HA" 2
+ca javascript_tool '{"action":"javascript_exec","text":"a.href=\"/Claude_Adgang\";a.click()","tabId":1}' "$HA" 2
+ca computer '{"action":"type","text":"admin.alekos.dk:443/x/../claude-forbind","tabId":1}' "$HA" 2
+ca form_input '{"ref":"x","value":"https://admin.alekos.dk/claude-adgang","tabId":1}' "$HA" 2
+ca computer '{"action":"type","text":"Se rejsen her: https://admin.alekos.dk/trips/abc","tabId":1}' "$HA" 0
+ca computer '{"action":"type","text":"Hej Alex, rejsen ligger i Admin under Claude-tests","tabId":1}' "$HA" 0
 echo "bestået $pass, fejl $fail"
 [ "$fail" = 0 ]

@@ -26,6 +26,7 @@ ok "1 0.7.0: open/osascript ikke spærret" '[ "$(felt "$K/settings.json" "any(\"
 ok "1 0.7.0: spring-godkendelser-over ikke spærret" '[ "$(felt "$K/settings.json" "\"disableBypassPermissionsMode\" in d[\"permissions\"]")" = False ]'
 ok "1 OneDrive skrivbar for Edit/Write" '[ "$(felt "$K/settings.json" "\"Edit(~/Library/CloudStorage/OneDrive-*/**)\" in d[\"permissions\"][\"allow\"]")" = True ]'
 ok "1 OneDrive læsbar for Read" '[ "$(felt "$K/settings.json" "\"Read(~/Library/CloudStorage/OneDrive-*/**)\" in d[\"permissions\"][\"allow\"]")" = True ]'
+ok "1 selve .git spærret i OneDrive/Skrivebord/Overførsler/Dokumenter" '[ "$(felt "$K/settings.json" "all(x in d[\"sandbox\"][\"filesystem\"][\"denyWrite\"] for x in (\"~/Library/CloudStorage/OneDrive-*/**/.git\",\"~/Downloads/.git\",\"~/Downloads/**/.git\",\"~/Desktop/**/.git\",\"~/Documents/**/.git\"))")" = True ]'
 ok "1 opsætningsfiler i OneDrive spærret" '[ "$(felt "$K/settings.json" "all(\"~/Library/CloudStorage/OneDrive-*/**/\"+f in d[\"sandbox\"][\"filesystem\"][\"denyWrite\"] for f in (\".claude/**\",\".mcp.json\",\".git/hooks/**\",\".vscode/**\"))")" = True ]'
 ok "1 Alekos-MCP spørger ikke" '[ "$(felt "$K/settings.json" "\"mcp__plugin_alekos_alekos__*\" in d[\"permissions\"][\"allow\"]")" = True ]'
 ok "1 Chrome spørger ikke" '[ "$(felt "$K/settings.json" "\"mcp__claude-in-chrome__*\" in d[\"permissions\"][\"allow\"]")" = True ]'

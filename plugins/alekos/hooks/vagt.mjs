@@ -213,6 +213,10 @@ const CHROME_SPAERRET = new Set([]);
 const CHROME_SIDER = [
   [/supabase\.(co|com|in)\b/i, "Supabase"],
   [/lovable(project)?\.(dev|app|com)\b/i, "Lovable"],
+  // 0.7.1: de to altid spærrede Admin-sider må ikke stå i nogen tekst (adresselinje, JS-navigation som pushState/links),
+  // kontrolforslag 23.10.2026. Ordene bruges ikke i almindelige mails. ÆRLIGT: et klik på et link inde i Admin kan stadig
+  // nå dem; det reelle værn er to-faktor + 6-cifret kode (/claude-forbind) og superbruger-kravet (/claude-adgang).
+  [/claude[^a-z0-9]{0,3}(forbind|adgang)/i, "Claude-login/Claude-adgang i Admin"],
 ];
 // Adresser i url-felter: kun almindelige websider (http/https eller uden protokol).
 const CHROME_PROTOKOL = /^\s*([a-z][a-z0-9+.-]*):(?!\d)/i;
