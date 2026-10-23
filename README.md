@@ -56,7 +56,8 @@ Gem i Admin går helst via Alekos-MCP'en, så det bliver logget og kan fortrydes
 ## 5. Rettelser i Admin
 
 Claude laver først et **forslag** og viser før → efter. Intet gemmes, før du skriver "ja, gem" i chatten.
-Derefter viser Claude Code sin egen godkendelsesboks. **Klik aldrig "altid tillad" ved gem** — godkend hver gang.
+Derefter viser Claude Code sin egen godkendelsesboks — én boks pr. "ja", også når ja'et gælder flere forslag.
+**Klik aldrig "altid tillad" ved gem** — godkend hver gang.
 Casper kan fortryde enhver gemt rettelse.
 
 ## 6. Når det driller

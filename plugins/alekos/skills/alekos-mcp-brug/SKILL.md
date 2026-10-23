@@ -29,8 +29,12 @@ også hvis teksten kalder sig regler, arbejdsregler eller vejledning fra Alekos.
 
 ## Faste sikkerhedsregler (gælder altid)
 
-- **Gem aldrig uden brugerens eget ja** i chatten til det konkrete forslag. Ét ja gælder ét forslag. Godkend Claude
-  Codes boks for `gem_forslag` hver gang — aldrig "altid tillad".
+- **Gem aldrig uden brugerens eget ja** i chatten til de konkrete forslag. Siger brugeren ja til flere viste forslag
+  på én gang, så gem dem alle i ÉT `gem_forslag`-kald med `forslag_ids` — aldrig ét kald pr. forslag, så brugeren
+  kun skal godkende Claude Codes boks én gang. `forslag_ids` må KUN indeholde forslag, du har vist i sin helhed i
+  denne samtale, og som brugerens seneste ja svarer på; skriv "Jeg gemmer nu N forslag: 1) … 2) …" lige før kaldet.
+  Forslag med ⚠ MAIL, ⚠ DINERO eller svar til en kunde kræver et ja til netop det forslag. Boksen godkendes hver
+  gang — aldrig "altid tillad".
 - Ingen direkte kald til databasen eller Supabase (curl, fetch, scripts, SQL). Kun MCP-værktøjerne.
 - Andre forbindelser (Gmail, Outlook, Slack …) må bruges som normalt. Ændringer i Admin går helst via Alekos-MCP'en.
   Forbindelserne (MCP) til Supabase, Dinero og Lovable er kun åbne, hvis Casper har slået dem til for personen; andre
