@@ -78,6 +78,7 @@ const FORBINDELSER_STANDARD = {
   ],
   ukendt_tilladt: true,
   chrome_spaerret: [], // den faste lokale bund står i tjekChrome/tjekChromeUrl og gælder altid
+  chrome_admin_sider: [], // uden svar fra serveren: hele Admin spærret
 };
 const FORBINDELSER_CACHE_MS = 10 * 60 * 1000;
 
@@ -104,7 +105,12 @@ function gyldigeRegler(d) {
     if (r.undtagen !== undefined && (!Array.isArray(r.undtagen) || r.undtagen.some((u) => typeof u !== "string"))) return null;
     if (r.kun_adresse !== undefined && typeof r.kun_adresse !== "boolean") return null;
   }
-  return { regler: d.regler, ukendt_tilladt: d.ukendt_tilladt, altid_spaerret: d.altid_spaerret, vaerktoej_regler: v, chrome_spaerret: cs };
+  // 0.6.0: Admin-sider, Claude in Chrome må åbne (Caspers beslutning 23.10.2026). Serveren kan kun vælge inden for
+  // pluginets eget loft (ADMIN_SIDER_LOFT); alt andet ignoreres.
+  const as = d.chrome_admin_sider ?? [];
+  if (!Array.isArray(as)) return null;
+  const sider = as.filter((x) => typeof x === "string" && ADMIN_SIDER_LOFT.includes(x));
+  return { regler: d.regler, ukendt_tilladt: d.ukendt_tilladt, altid_spaerret: d.altid_spaerret, vaerktoej_regler: v, chrome_spaerret: cs, chrome_admin_sider: sider };
 }
 
 /**
@@ -116,8 +122,10 @@ async function forbindelser() {
   if (process.env.ALEKOS_VAGT_OFFLINE === "1") {
     // test: kun nødlisten (+ evt. ekstra spærrede Chrome-adresser — kan kun stramme)
     let ekstra = [];
+    let sider = [];
     try { ekstra = gyldigeRegler({ ...FORBINDELSER_STANDARD, chrome_spaerret: JSON.parse(process.env.ALEKOS_VAGT_TEST_CHROME ?? "[]") })?.chrome_spaerret ?? []; } catch { ekstra = []; }
-    return { ...FORBINDELSER_STANDARD, chrome_spaerret: ekstra };
+    try { sider = gyldigeRegler({ ...FORBINDELSER_STANDARD, chrome_admin_sider: JSON.parse(process.env.ALEKOS_VAGT_TEST_ADMIN_SIDER ?? "[]") })?.chrome_admin_sider ?? []; } catch { sider = []; }
+    return { ...FORBINDELSER_STANDARD, chrome_spaerret: ekstra, chrome_admin_sider: sider };
   }
   const fil = path.join(KONFIG, "alekos-forbindelser.json");
   const nu = Date.now();
@@ -206,6 +214,26 @@ const CHROME_SIDER = [
 ];
 // Adresser i url-felter: kun almindelige websider (http/https eller uden protokol).
 const CHROME_PROTOKOL = /^\s*([a-z][a-z0-9+.-]*):(?!\d)/i;
+// 0.6.0: de eneste Admin-sider, Claude in Chrome nogensinde kan få lov at åbne (serveren slår dem til/fra pr. person).
+// Programbyggeren: "PDF alle uger" til velkomstpakkerne (Caspers beslutning 23.10.2026). ÆRLIGT: Admin er én app, så
+// når siden er åben, kan Claude klikke videre i menuen — vagten stopper kun direkte adresser til andre Admin-sider.
+const ADMIN_SIDER_LOFT = ["programbygger"];
+/** Er adressen præcis https://admin.alekos.dk/<tilladt side>[/…][?…] (uden login i adressen, port eller omveje)? */
+function tilladtAdminSide(url, sider) {
+  if (!sider.length || typeof url !== "string") return false;
+  for (const t of [url.trim(), chromeTekst(url).trim()]) {
+    if (!/^https:\/\/admin\.alekos\.dk\//i.test(t)) return false;
+    const raa = t.slice("https://admin.alekos.dk".length).split(/[?#]/)[0];
+    if (/[\\%]|\/\.\.?(\/|$)/.test(raa)) return false;
+    let u;
+    try { u = new URL(t); } catch { return false; }
+    if (u.protocol !== "https:" || u.hostname !== "admin.alekos.dk" || u.port || u.username || u.password) return false;
+    if (!sider.some((s) => u.pathname === `/${s}` || u.pathname.startsWith(`/${s}/`))) return false;
+    // Ingen omdirigering via ?-delen (fx ?next=/trips): kun enkle nøgle=værdi med bogstaver, tal og - _ .
+    if (!/^(\?[a-z0-9_.=&-]*)?(#[a-z0-9_-]*)?$/i.test(u.search + u.hash)) return false;
+  }
+  return true;
+}
 // Genveje til adresselinjen, nye faner og vinduer (så "skriv admin.alekos.dk" ikke kan deles op i flere kald).
 const CHROME_TASTER = /\b(cmd|command|meta|super|win|windows|ctrl|control)(_[lr])?\s*\+\s*(shift\s*\+\s*)?(l|t|n|k|e)\b|\balt(_[lr])?\s*\+\s*d\b|\bf6\b/i;
 // JavaScript, der kan læse lagrede logins, navigere væk eller skjule, hvad det gør.
@@ -257,7 +285,7 @@ function tjekChromeUrl(url, ekstra = []) {
   tjekServerSider([vaert], ekstra, true);
 }
 
-function tjekChrome(navn, input, ekstra = []) {
+function tjekChrome(navn, input, ekstra = [], sider = []) {
   if (typeof navn !== "string") bloker("Chrome-kald uden navn");
   navn = navn.trim().toLowerCase().replace(/^mcp__claude-in-chrome__/, "");
   if (!CHROME_KENDTE.has(navn)) bloker(`ukendt Chrome-værktøj "${navn}"`);
@@ -268,17 +296,19 @@ function tjekChrome(navn, input, ekstra = []) {
     for (const a of input.actions) {
       if (!a || typeof a !== "object") bloker("Chrome-batch med ukendt handling");
       if (String(a.name ?? "").trim().toLowerCase().replace(/^mcp__claude-in-chrome__/, "") === "browser_batch") bloker("Chrome-batch i batch");
-      tjekChrome(a.name, a.input, ekstra);
+      tjekChrome(a.name, a.input, ekstra, sider);
     }
     return;
   }
-  const alt = chromeTekst(JSON.stringify(input));
+  // En tilladt Admin-side (0.6.0) må stå i url-feltet på navigate/ny fane — men ingen andre steder.
+  const adminOk = (navn === "navigate" || navn === "tabs_create_mcp") && tilladtAdminSide(input.url, sider);
+  const alt = chromeTekst(JSON.stringify(adminOk ? { ...input, url: "" } : input));
   for (const [re, hvad] of CHROME_SIDER) if (re.test(alt)) bloker(`${hvad} i browseren (brug Alekos-MCP'en til Admin)`);
   if (ekstra.length) {
     if (alt.length > MAKS_CHROME_TEKST) bloker("meget lang tekst i browseren (del den op)");
     tjekServerSider(alt.match(VAERTER_I_TEKST) ?? [], ekstra, false);
   }
-  if (typeof input.url === "string") tjekChromeUrl(chromeTekst(input.url), ekstra);
+  if (typeof input.url === "string" && !adminOk) tjekChromeUrl(chromeTekst(input.url), ekstra);
   if (navn === "computer" && input.action === "key" && CHROME_TASTER.test(String(input.text ?? ""))) {
     bloker("genvej til adresselinjen, ny fane eller nyt vindue (brug navigate)");
   }
@@ -419,8 +449,9 @@ const cwd = typeof data.cwd === "string" ? data.cwd : process.cwd();
 if (CHROME.test(tool)) {
   // Serverens liste (0.5.6) oveni den faste lokale bund; svarer serveren ikke, gælder sidst kendte/den lokale bund.
   let ekstra = [];
-  try { ekstra = (await forbindelser()).chrome_spaerret ?? []; } catch { ekstra = []; }
-  tjekChrome(tool.slice("mcp__claude-in-chrome__".length), inp, ekstra);
+  let sider = [];
+  try { const f = await forbindelser(); ekstra = f.chrome_spaerret ?? []; sider = f.chrome_admin_sider ?? []; } catch { ekstra = []; sider = []; }
+  tjekChrome(tool.slice("mcp__claude-in-chrome__".length), inp, ekstra, sider);
   process.exit(0);
 }
 

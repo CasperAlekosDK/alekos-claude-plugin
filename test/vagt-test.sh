@@ -185,6 +185,40 @@ ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://www.facebook.com","tabI
 ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://admin.alekos.dk","tabId":1}')" '[]' 2
 ct "$(j mcp__claude-in-chrome__navigate '{"url":"https://admin.alekos.dk","tabId":1}')" '[{"moenster":"(","hvad":"x"}]' 2
 
+# 0.6.0: Programbyggeren i Admin (Caspers beslutning 23.10.2026) — kun når serveren slår den til, og kun /programbygger
+ca(){ printf '%s' "$(j "mcp__claude-in-chrome__$1" "$2")" | HOME="$S" CLAUDE_CONFIG_DIR= ALEKOS_VAGT_OFFLINE=1 ALEKOS_VAGT_TEST_ADMIN_SIDER="$3" node "$V" >/dev/null 2>&1; r=$?; if [ $r = "$4" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FEJL (fik $r, ville $4): $1 $2 / $3"; fi; }
+PB='["programbygger"]'
+ca navigate '{"url":"https://admin.alekos.dk/programbygger","tabId":1}' "$PB" 0
+ca navigate '{"url":"https://admin.alekos.dk/programbygger?trip=abc-123&uge=2","tabId":1}' "$PB" 0
+ca tabs_create_mcp '{"url":"https://admin.alekos.dk/programbygger"}' "$PB" 0
+ca browser_batch '{"actions":[{"name":"navigate","input":{"url":"https://admin.alekos.dk/programbygger","tabId":1}},{"name":"computer","input":{"action":"screenshot","tabId":1}}]}' "$PB" 0
+ca navigate '{"url":"https://admin.alekos.dk/programbygger","tabId":1}' '[1,"programbygger"]' 0
+ca navigate '{"url":"https://admin.alekos.dk/programbygger","tabId":1}' '[]' 2
+ca navigate '{"url":"https://admin.alekos.dk/programbygger","tabId":1}' '["trips"]' 2
+ca navigate '{"url":"https://admin.alekos.dk/programbygger","tabId":1}' '"programbygger"' 2
+ca navigate '{"url":"https://admin.alekos.dk/trips","tabId":1}' '["programbygger","trips"]' 2
+ca navigate '{"url":"https://admin.alekos.dk/trips","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk/","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk/programbyggerx","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk/programbygger/../trips","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk/programbygger/%2e%2e/trips","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk/programbygger%2f..%2ftrips","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk/programbygger?next=/trips","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk/programbygger?r=https://admin.alekos.dk/trips","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk/programbygger#/trips","tabId":1}' "$PB" 2
+ca navigate '{"url":"http://admin.alekos.dk/programbygger","tabId":1}' "$PB" 2
+ca navigate '{"url":"admin.alekos.dk/programbygger","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk:8443/programbygger","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://x@admin.alekos.dk/programbygger","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk.evil.com/programbygger","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://mit.alekos.dk/programbygger","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk\\@evil.com/programbygger","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk/programbygger\\..\\trips","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk/programbygger","tabId":1,"x":"admin.alekos.dk/trips"}' "$PB" 2
+ca computer '{"action":"type","text":"https://admin.alekos.dk/trips","tabId":1}' "$PB" 2
+ca computer '{"action":"type","text":"admin.alekos.dk/programbygger","tabId":1}' "$PB" 2
+ca javascript_tool '{"action":"javascript_exec","tabId":1,"text":"localStorage"}' "$PB" 2
+
 # 0.5.7: Claude Codes eget Alekos-login (browserloginet) — kun en gyldig amcp_-nøgle for Alekos-pluginets server
 N="$(cd "$(dirname "$0")/.." && pwd)/plugins/alekos/hooks/noegle.mjs"
 nk(){ r=$(node -e "import('$N').then(m=>{const d=JSON.parse(process.argv[1]);console.log(m.vaelgAlekosNoegle(d,1000000)??'null')})" "$1"); if [ "$r" = "$2" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FEJL nøgle (fik $r, ville $2): $1"; fi; }
