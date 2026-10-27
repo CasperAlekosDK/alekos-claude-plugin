@@ -70,7 +70,12 @@ Casper kan fortryde enhver gemt rettelse.
 - **"Alekos: sikkerhedsreglerne kunne ikke sættes":** ring til Casper. Vagten virker stadig.
 - **Claude Code vil ikke starte** ("sandbox required but unavailable"): sandkassen kan ikke starte på din Mac. Ring til Casper.
 - **Internet i kommandoer:** første gang en kommando vil på et nyt domæne, spørger Claude Code dig. Kun Supabase er spærret.
-- **En fil fra en mail:** gem vedhæftningen i Overførsler først, eller træk filen direkte ind i chatten.
+- **En fil fra en mail:** gem vedhæftningen i Overførsler først, eller træk filen direkte ind i chatten. Skal filen op i
+  Admin (fx en togbillet), lægger Claude den selv op via Claude in Chrome efter dit ja — du skal bare være logget ind
+  i Admin i Chrome-profilen.
+- **Outlook i Chrome** ("Permission denied for this action on this domain"): det er Chrome-udvidelsen, ikke Alekos.
+  Tillad outlook.office.com i Claude-udvidelsens tilladelser i Chrome. Mails kan også læses og markeres via
+  Microsoft 365-forbindelsen i Claude.
 - **Andre forbindelser** (Gmail, Outlook, Slack …) virker som i dag. Supabase, Dinero og Lovable slår Casper til/fra
   for dig i Admin. Værktøjer, der styrer filer, browser, terminal eller VS Code, er altid spærret.
 

@@ -67,6 +67,11 @@ export const SKRIVBARE = ["~/Desktop/**/*", "~/Downloads/**/*", "~/Documents/**/
 export const SKRIVBARE_FARLIGE = ["~/Desktop", "~/Downloads", "~/Documents"].flatMap((m) =>
   [".claude/**", ".claude.json", ".mcp.json", ".git/hooks/**", ".git/config", ".vscode/**", ".husky/**", "*.code-workspace",
     ".idea/**", ".envrc", "*.command", "*.tool", "*.workflow/**", ".git"].flatMap((f) => [`${m}/**/${f}`, `${m}/${f}`]));
+// 0.7.4 (Cilles melding 27.10.2026, Caspers ja): de samme tre mapper er ekstra arbejdsmapper (kun filadgang — i modsætning til /add-dir indlæses ingen .claude/, CLAUDE.md eller .mcp.json derfra). Claude in
+// Chrome lægger kun filer op, som sessionen må læse — uden dette kunne Claude ikke selv lægge fx en DSB-billet fra
+// Overførsler op på Admins upload-side efter ja. Ingen ny adgang ud af Mac'en: kommandoer kunne i forvejen læse mapperne.
+// Fulde stier (ikke ~), så indstillingen ikke afhænger af, om Claude Code udvider ~ her.
+export const ARBEJDSMAPPER = () => ["Downloads", "Desktop", "Documents"].map((m) => path.join(os.homedir(), m));
 export const GEM_VAERKTOEJ = "mcp__plugin_alekos_alekos__gem_forslag";
 // 0.5.9 (Caspers valg 23.10.2026, Alex: "den kommer virkelig tit med at jeg skal godkende"): Alekos-MCP'en og Claude in
 // Chrome spørger ikke længere ved hvert kald. Gem i Admin spørger stadig (ask på GEM_VAERKTOEJ vinder over allow;
@@ -127,6 +132,7 @@ export function regler({ ekstraMapper = [] } = {}) {
   return {
     permissions: {
       allow: [`Edit(${ONEDRIVE}/**)`, `Read(${ONEDRIVE}/**)`, ...TILLADT_UDEN_SPOERGSMAAL],
+      additionalDirectories: ARBEJDSMAPPER(),
       deny: [
         ...LAAST.map((p) => `Read(${p}/**)`),
         "Read(**/.env)",
@@ -203,6 +209,7 @@ export function flet(nu, { konfig, ekstraMapper = [], fjernUndtagelser = true } 
   if (!erObjekt(ud.permissions)) ud.permissions = {};
   ud.permissions.deny = union(ud.permissions.deny, R.permissions.deny).filter((r) => !FJERNEDE_REGLER.includes(r));
   ud.permissions.ask = union(ud.permissions.ask, R.permissions.ask);
+  ud.permissions.additionalDirectories = union(ud.permissions.additionalDirectories, R.permissions.additionalDirectories);
   // 0.7.0: "spring godkendelser over" er tilladt igen — fjern kun vores egen gamle spærring.
   if (ud.permissions.disableBypassPermissionsMode === "disable") delete ud.permissions.disableBypassPermissionsMode;
   // Chrome-reglen står i FJERNEDE_REGLER (gammelt forbud fra 0.2-0.3) — den fjernes fra deny, men må gerne stå i allow.

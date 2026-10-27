@@ -26,6 +26,7 @@ ok "1 OneDrive, Skrivebord, Overførsler og Dokumenter skrivbare for kommandoer"
 ok "1 0.7.0: kommandoer må køre uden sandkasse efter ja" '[ "$(felt "$K/settings.json" "d[\"sandbox\"][\"allowUnsandboxedCommands\"]")" = True ]'
 ok "1 0.7.0: open/osascript ikke spærret" '[ "$(felt "$K/settings.json" "any(\"open\" in x or \"osascript\" in x for x in d[\"permissions\"][\"deny\"])")" = False ]'
 ok "1 0.7.0: spring-godkendelser-over ikke spærret" '[ "$(felt "$K/settings.json" "\"disableBypassPermissionsMode\" in d[\"permissions\"]")" = False ]'
+ok "1 0.7.4: Overførsler/Skrivebord/Dokumenter er arbejdsmapper (Chrome-upload)" '[ "$(felt "$K/settings.json" "d[\"permissions\"][\"additionalDirectories\"] == [\"$S/h1/Downloads\",\"$S/h1/Desktop\",\"$S/h1/Documents\"]")" = True ]'
 ok "1 OneDrive skrivbar for Edit/Write" '[ "$(felt "$K/settings.json" "\"Edit(~/Library/CloudStorage/OneDrive-*/**)\" in d[\"permissions\"][\"allow\"]")" = True ]'
 ok "1 OneDrive læsbar for Read" '[ "$(felt "$K/settings.json" "\"Read(~/Library/CloudStorage/OneDrive-*/**)\" in d[\"permissions\"][\"allow\"]")" = True ]'
 ok "1 selve .git spærret i OneDrive/Skrivebord/Overførsler/Dokumenter" '[ "$(felt "$K/settings.json" "all(x in d[\"sandbox\"][\"filesystem\"][\"denyWrite\"] for x in (\"~/Library/CloudStorage/OneDrive-*/**/.git\",\"~/Downloads/.git\",\"~/Downloads/**/.git\",\"~/Desktop/**/.git\",\"~/Documents/**/.git\"))")" = True ]'
