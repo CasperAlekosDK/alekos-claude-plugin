@@ -229,21 +229,37 @@ const ADMIN_SIDER_LOFT = ["programbygger", "*"];
 // Altid spærret, også med "*": /claude-forbind (et menneske godkender et nyt Claude-login — Claude må ikke godkende sit
 // eget) og /claude-adgang (Claudes egne regler — Claude må ikke løsne dem, kontrolfund 23.10.2026; kun superbrugere når siden).
 const ADMIN_ALTID_SPAERRET = ["claude-forbind", "claude-adgang"];
-/** Er adressen præcis https://admin.alekos.dk/<tilladt side>[/…][?…] (uden login i adressen, port eller omveje)? */
+/**
+ * Er adressen præcis https://admin.alekos.dk/<tilladt side>[/…][?…] (uden login i adressen, port eller omveje)?
+ * Med hele Admin ("*") også uden https://, uden skråstreg og med søgeord (mellemrum, æøå, e-mail, kolon) i ?-delen.
+ */
 function tilladtAdminSide(url, sider) {
   if (!sider.length || typeof url !== "string") return false;
-  for (const t of [url.trim(), chromeTekst(url).trim()]) {
-    if (!/^https:\/\/admin\.alekos\.dk\//i.test(t)) return false;
+  const hele = sider.includes("*");
+  for (let t of [url.trim(), chromeTekst(url).trim()]) {
+    // 0.7.5 (Cilles meldinger 28.10.2026): med hele Admin spærrede vagten forsiden uden skråstreg (https://admin.alekos.dk)
+    // og admin.alekos.dk/… uden https:// — de adresser, Claude oftest skriver. Kun ved "*"; Programbyggeren er uændret.
+    if (hele && /^admin\.alekos\.dk([/?#]|$)/i.test(t)) t = `https://${t}`;
+    if (!(hele ? /^https:\/\/admin\.alekos\.dk([/?#]|$)/i : /^https:\/\/admin\.alekos\.dk\//i).test(t)) return false;
     const raa = t.slice("https://admin.alekos.dk".length).split(/[?#]/)[0];
-    if (/[\\%]|\/\.\.?(\/|$)/.test(raa)) return false;
+    if (/[\\%]|\/\.\.?(\/|$)|\/\//.test(raa)) return false; // 0.7.5: også // (//claude-forbind, kontrolfund)
     let u;
     try { u = new URL(t); } catch { return false; }
     if (u.protocol !== "https:" || u.hostname !== "admin.alekos.dk" || u.port || u.username || u.password) return false;
     const p = u.pathname.toLowerCase();
     if (ADMIN_ALTID_SPAERRET.some((s) => p === `/${s}` || p.startsWith(`/${s}/`))) return false;
-    if (!sider.includes("*") && !sider.some((s) => u.pathname === `/${s}` || u.pathname.startsWith(`/${s}/`))) return false;
+    if (!hele && !sider.some((s) => u.pathname === `/${s}` || u.pathname.startsWith(`/${s}/`))) return false;
     // Ingen omdirigering via ?-delen (fx ?next=/trips): kun enkle nøgle=værdi med bogstaver, tal og - _ .
-    if (!/^(\?[a-z0-9_.=&-]*)?(#[a-z0-9_-]*)?$/i.test(u.search + u.hash)) return false;
+    // Med hele Admin også søgeord med mellemrum, æøå, e-mail, kolon, komma, (), [] og ' (afkodet — værten er allerede
+    // afgjort af new URL; stadig ingen / \ eller %, som er omdirigeringsvejene ?next=/…).
+    // ADVARSEL: får Admin en dag en omdirigering efter en query-værdi (?next=, ?redirect=), skal reglen strammes —
+    // browseren læser fx ?r=https:evil.com som https://evil.com, selv uden skråstreger (kontrolfund 28.10.2026).
+    let q = u.search;
+    if (hele) { try { q = decodeURIComponent(q.replace(/\+/g, " ")); } catch { return false; } }
+    if (!(hele ? /^(\?[\p{L}\p{N} _.=&,+@:'()[\]-]*)?$/u : /^(\?[a-z0-9_.=&-]*)?$/i).test(q)) return false;
+    // 0.7.5 (kontrolfund): ordene claude-forbind/claude-adgang må heller ikke stå i en godkendt Admin-adresse (fx ?q=…).
+    if (CHROME_SIDER.some(([re]) => re.test(t) || re.test(q))) return false;
+    if (!/^(#[a-z0-9_-]*)?$/i.test(u.hash)) return false;
   }
   return true;
 }
@@ -284,7 +300,7 @@ function tjekServerSider(vaerter, ekstra, adresse) {
 const VAERTER_I_TEKST = /[a-z0-9-]+(?:\.[a-z0-9-]+)+/gi;
 const MAKS_CHROME_TEKST = 50_000;
 
-function tjekChromeUrl(url, ekstra = []) {
+function tjekChromeUrl(url, ekstra = [], adminSider = []) {
   const u = String(url).trim();
   if (/^(back|forward)$/i.test(u)) return;
   const m = u.match(CHROME_PROTOKOL);
@@ -295,7 +311,12 @@ function tjekChromeUrl(url, ekstra = []) {
   // 0.7.0: Mit Alekos, VF, Media og de andre alekos.dk-sider er åbne — medarbejderne bruger dem selv i dag. Admin følger
   // kontakten i Claude-adgang (0.6.1: "*" = hele Admin, standard Til) og er aldrig åben på /claude-forbind og /claude-adgang;
   // en tilladt Admin-adresse er allerede godkendt i tjekChrome og når ikke hertil.
-  if (vaert === "admin.alekos.dk") bloker("denne side i Admin er ikke slået til for dig (Admin → Claude-adgang)");
+  // 0.7.5: to beskeder, så man kan se, om reglerne fra serveren mangler, eller adressen er afvist.
+  if (vaert === "admin.alekos.dk") {
+    bloker(adminSider.length
+      ? "denne adresse i Admin er ikke tilladt for Claude (prøv https://admin.alekos.dk/<side> uden omveje)"
+      : "denne side i Admin er ikke slået til for dig (Admin → Claude-adgang)");
+  }
   if (sider.test(vaert)) {
     bloker(`${vaert} i browseren (brug Alekos-MCP'en til Admin)`);
   }
@@ -322,7 +343,7 @@ function tjekChrome(navn, input, ekstra = [], sider = []) {
   const alt = chromeTekst(JSON.stringify(adminOk ? { ...input, url: "" } : input));
   for (const [re, hvad] of CHROME_SIDER) if (re.test(alt)) bloker(`${hvad} i browseren (brug Alekos-MCP'en til Admin)`);
   if (ekstra.length && alt.length <= MAKS_CHROME_TEKST) tjekServerSider(alt.match(VAERTER_I_TEKST) ?? [], ekstra, false);
-  if (typeof input.url === "string" && !adminOk) tjekChromeUrl(chromeTekst(input.url), ekstra);
+  if (typeof input.url === "string" && !adminOk) tjekChromeUrl(chromeTekst(input.url), ekstra, sider);
   if ("paths" in input && !Array.isArray(input.paths)) bloker("filupload uden liste over filer");
   for (const p of Array.isArray(input.paths) ? input.paths : []) {
     if (typeof p !== "string") bloker("filupload med ugyldig sti");

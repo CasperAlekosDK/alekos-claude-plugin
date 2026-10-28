@@ -243,6 +243,39 @@ ca navigate '{"url":"https://admin.alekos.dk.evil.com/trips","tabId":1}' "$HA" 0
 ca navigate '{"url":"https://x@admin.alekos.dk/trips","tabId":1}' "$HA" 2
 ca navigate '{"url":"http://admin.alekos.dk/trips","tabId":1}' "$HA" 2
 ca navigate '{"url":"https://mit.alekos.dk/","tabId":1}' "$HA" 0
+# 0.7.5 (Cilles meldinger 28.10.2026): forsiden uden skråstreg, uden https:// og søgeord med mellemrum/æøå skal virke med "*"
+ca navigate '{"url":"https://admin.alekos.dk","tabId":1}' "$HA" 0
+ca navigate '{"url":"admin.alekos.dk","tabId":1}' "$HA" 0
+ca navigate '{"url":"admin.alekos.dk/pc/leader-resources","tabId":1}' "$HA" 0
+ca tabs_create_mcp '{"url":"admin.alekos.dk/trips?search=291026"}' "$HA" 0
+ca navigate '{"url":"https://admin.alekos.dk?tab=x","tabId":1}' "$HA" 0
+ca navigate '{"url":"https://admin.alekos.dk/pc/leader-resources?q=Kastrup%20Lufthavn","tabId":1}' "$HA" 0
+ca navigate '{"url":"https://admin.alekos.dk/pc/leader-resources?q=K%C3%B8benhavn+lufthavn,DL","tabId":1}' "$HA" 0
+ca navigate '{"url":"https://admin.alekos.dk/kundeservice?q=Rødovre","tabId":1}' "$HA" 0
+# … men stadig ingen omveje
+ca navigate '{"url":"admin.alekos.dk/claude-forbind","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk?r=https://evil.com","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/trips?next=%2Fclaude-forbind","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/trips?next=%252Fclaude-adgang","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/trips?x=%E0%A4%A","tabId":1}' "$HA" 2
+# værten er evil.com (fremmed side = tilladt som altid)
+ca navigate '{"url":"https://admin.alekos.dk@evil.com","tabId":1}' "$HA" 0
+ca navigate '{"url":"admin.alekos.dk@evil.com/trips","tabId":1}' "$HA" 0
+ca navigate '{"url":"admin.alekos.dk.evil.com/trips","tabId":1}' "$HA" 0
+ca navigate '{"url":"admin.alekos.dk:8443/trips","tabId":1}' "$HA" 2
+ca navigate '{"url":"//admin.alekos.dk/trips","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk#/claude-forbind","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/kundeservice?q=casper@alekos.dk","tabId":1}' "$HA" 0
+ca navigate '{"url":"https://admin.alekos.dk/trips?from=2026-10-28T10:00&q=O%27Brien%20(test)","tabId":1}' "$HA" 0
+# kontrolfund 28.10.2026: // foran de spærrede sider og ordene i ?-delen
+ca navigate '{"url":"https://admin.alekos.dk//claude-forbind","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk///claude-adgang","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/trips?next=claude-forbind","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/trips?q=Claude%20Adgang","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/trips?r=https:%2F%2Fevil.com","tabId":1}' "$HA" 2
+ca navigate '{"url":"https://admin.alekos.dk/claude-upload/abc?x=1","tabId":1}' "$HA" 0
+ca navigate '{"url":"admin.alekos.dk","tabId":1}' "$PB" 2
+ca navigate '{"url":"https://admin.alekos.dk/programbygger?q=K%C3%B8benhavn","tabId":1}' "$PB" 2
 ca navigate '{"url":"https://media.alekos.dk/","tabId":1}' "$HA" 0
 ca navigate '{"url":"https://rufnmcnhebhzhzzgljcs.supabase.co/rest/v1/","tabId":1}' "$HA" 2
 ca computer '{"action":"type","text":"admin.alekos.dk/trips","tabId":1}' "$HA" 0
