@@ -19,6 +19,7 @@ K="$S/k1"; mkdir -p "$K"; koer "$K" "$S/h1"
 ok "1 exit 0" '[ $rc = 0 ]'
 ok "1 sandkasse slået til" '[ "$(felt "$K/settings.json" "d[\"sandbox\"][\"enabled\"]")" = True ]'
 ok "1 gem_forslag spørger" '[ "$(felt "$K/settings.json" "\"mcp__plugin_alekos_alekos__gem_forslag\" in d[\"permissions\"][\"ask\"]")" = True ]'
+ok "1 del_opskrift spørger (0.7.6)" '[ "$(felt "$K/settings.json" "\"mcp__plugin_alekos_alekos__del_opskrift\" in d[\"permissions\"][\"ask\"] and \"mcp__plugin_alekos_alekos__del_opskrift\" not in d[\"permissions\"][\"allow\"]")" = True ]'
 ok "1 Supabase spærret" '[ "$(felt "$K/settings.json" "\"*.supabase.co\" in d[\"sandbox\"][\"network\"][\"deniedDomains\"]")" = True ]'
 ok "1 testmappen er skrivebeskyttet" '[ "$(felt "$K/settings.json" "\"$K\" in d[\"sandbox\"][\"filesystem\"][\"denyWrite\"]")" = True ]'
 ok "1 pluginets cache-mappe tilføjes ikke pr. version" '[ "$(felt "$K/settings.json" "any(\"plugins/cache\" in x for x in d[\"sandbox\"][\"filesystem\"][\"denyWrite\"])")" = False ]'

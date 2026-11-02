@@ -73,6 +73,9 @@ export const SKRIVBARE_FARLIGE = ["~/Desktop", "~/Downloads", "~/Documents"].fla
 // Fulde stier (ikke ~), så indstillingen ikke afhænger af, om Claude Code udvider ~ her.
 export const ARBEJDSMAPPER = () => ["Downloads", "Desktop", "Documents"].map((m) => path.join(os.homedir(), m));
 export const GEM_VAERKTOEJ = "mcp__plugin_alekos_alekos__gem_forslag";
+// 0.7.6 (02.11.2026, Caspers ja + kontrolfund): del_opskrift sender en opskrift til Caspers kø — medarbejderen godkender
+// hver deling i Claude Codes boks (så en vildledt Claude ikke kan sende noget af sig selv). ask vinder over allow.
+export const DEL_OPSKRIFT_VAERKTOEJ = "mcp__plugin_alekos_alekos__del_opskrift";
 // 0.5.9 (Caspers valg 23.10.2026, Alex: "den kommer virkelig tit med at jeg skal godkende"): Alekos-MCP'en og Claude in
 // Chrome spørger ikke længere ved hvert kald. Gem i Admin spørger stadig (ask på GEM_VAERKTOEJ vinder over allow;
 // gem_upload kører uden spørgsmål, men serveren lader den kun afslutte et upload, der allerede er godkendt via gem_forslag), og
@@ -179,7 +182,7 @@ export function regler({ ekstraMapper = [] } = {}) {
         "WebFetch(domain:*.supabase.co)",
         ...FARLIGE_MCP,
       ],
-      ask: [GEM_VAERKTOEJ],
+      ask: [GEM_VAERKTOEJ, DEL_OPSKRIFT_VAERKTOEJ],
     },
     sandbox: {
       enabled: true,
@@ -216,7 +219,7 @@ export function flet(nu, { konfig, ekstraMapper = [], fjernUndtagelser = true } 
   ud.permissions.allow = union(ud.permissions.allow, R.permissions.allow).filter((r) => !FJERNEDE_REGLER.includes(r) || R.permissions.allow.includes(r));
   if (Array.isArray(ud.permissions.allow)) {
     // En allow på gem-værktøjet ville være død (ask vinder), men fjern den, så det er tydeligt.
-    ud.permissions.allow = ud.permissions.allow.filter((r) => r !== GEM_VAERKTOEJ && !String(r).startsWith("mcp__plugin_alekos_alekos__gem"));
+    ud.permissions.allow = ud.permissions.allow.filter((r) => r !== GEM_VAERKTOEJ && r !== DEL_OPSKRIFT_VAERKTOEJ && !String(r).startsWith("mcp__plugin_alekos_alekos__gem"));
   }
   if (!erObjekt(ud.sandbox)) ud.sandbox = {};
   ud.sandbox.enabled = true;
