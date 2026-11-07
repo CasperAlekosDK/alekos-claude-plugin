@@ -116,7 +116,9 @@ function gyldigeRegler(d) {
   const as = d.chrome_admin_sider ?? [];
   if (!Array.isArray(as)) return null;
   const sider = as.filter((x) => typeof x === "string" && ADMIN_SIDER_LOFT.includes(x));
-  return { regler: d.regler, ukendt_tilladt: d.ukendt_tilladt, altid_spaerret: d.altid_spaerret, vaerktoej_regler: v, chrome_spaerret: cs, chrome_admin_sider: sider };
+  // 0.8.0: Caspers kontakt for overgangen til org-synk (læses af opstartsreglen fra cachen). Kun true tæller.
+  return { regler: d.regler, ukendt_tilladt: d.ukendt_tilladt, altid_spaerret: d.altid_spaerret, vaerktoej_regler: v, chrome_spaerret: cs, chrome_admin_sider: sider,
+    org_synk_overgang: d.org_synk_overgang === true };
 }
 
 /**
@@ -513,10 +515,19 @@ async function tjekServer(server, rest, navn) {
   }
 }
 
+// 0.8.0 (kontrolfund 07.11.2026): de skrivende Alekos-værktøjer spørger ALTID i Claude Codes boks — uanset hvilket
+// servernavn værktøjet får (fx via org-synk), og selv om nogen har klikket "tillad altid". Kun efter alle spærringer.
+const SKRIVENDE_ALEKOS = /__(gem_forslag|del_opskrift|ret_fagviden)$/i;
+function spoerg(t) {
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask",
+    permissionDecisionReason: `Alekos: ${t.split("__").pop()} gemmer eller deler noget — godkend kun, hvis du selv har sagt ja i chatten.` } }));
+  process.exit(0);
+}
 if (tool.startsWith("mcp__")) {
-  if (TILLADT_MCP.test(tool)) process.exit(0);
+  if (TILLADT_MCP.test(tool)) { if (SKRIVENDE_ALEKOS.test(tool)) spoerg(tool); process.exit(0); }
   const rest = tool.slice("mcp__".length);
   await tjekServer(rest.split("__")[0] ?? "", rest, `MCP-værktøjet ${tool}`);
+  if (SKRIVENDE_ALEKOS.test(tool)) spoerg(tool);
   process.exit(0);
 }
 

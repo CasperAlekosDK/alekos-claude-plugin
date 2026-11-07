@@ -322,6 +322,20 @@ kt=$(node -e "import('$N').then(m=>console.log(m.lagerKonto({USER:'casper'})+'|'
 nk "{\"mcpOAuth\":{\"plugin:alekos:alekos|abc\":{\"accessToken\":\"$K43\"}}}" null
 grep -q 'console\.\(log\|error\)' "$N" && { fail=$((fail+1)); echo "FEJL: noegle.mjs må aldrig skrive noget ud"; } || pass=$((pass+1))
 
+# 0.8.0: headersHelper sender X-Alekos-Plugin (udgaven fra plugin.json) og fejler aldrig. Kørt i en kopi med en falsk
+# faelles.mjs, så nøgleringen aldrig læses i testen.
+HK="$S/hkopi"; mkdir -p "$HK/scripts" "$HK/.claude-plugin"; cp "$(cd "$(dirname "$0")/.." && pwd)/plugins/alekos/scripts/headers.mjs" "$HK/scripts/"
+VV="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["version"])' "$(cd "$(dirname "$0")/.." && pwd)/plugins/alekos/.claude-plugin/plugin.json")"
+hd(){ # $1 = faelles-stub, $2 = plugin.json-indhold, $3 = forventet (python-udtryk over d)
+  printf '%s' "$1" > "$HK/scripts/faelles.mjs"; printf '%s' "$2" > "$HK/.claude-plugin/plugin.json"
+  o="$(node "$HK/scripts/headers.mjs" 2>/dev/null)"; r=$?
+  if [ $r = 0 ] && printf '%s' "$o" | python3 -c "import json,sys;d=json.load(sys.stdin);sys.exit(0 if ($3) else 1)"; then pass=$((pass+1)); else fail=$((fail+1)); echo "FEJL headers ($3)"; fi; }
+hd 'export const hentNoegle=()=>null;' "{\"version\":\"$VV\"}" "d=={'X-Alekos-Plugin':'$VV'}"
+hd 'export const hentNoegle=()=>"amcp_x";' '{"version":"0.8.0"}' "d=={'X-Alekos-Plugin':'0.8.0','Authorization':'Bearer amcp_x'}"
+hd 'export const hentNoegle=()=>{throw new Error("x")};' '{"version":"0.8.0"}' "d=={'X-Alekos-Plugin':'0.8.0'}"
+hd 'export const hentNoegle=()=>null;' '{"version":' "d=={}"
+hd 'export const hentNoegle=()=>null;' '{"version":"0.8.0\r\nX: y"}' "d=={}"
+
 # 0.8.0: org-synkens mappe (alekos@synced) og den kørende kopi (CLAUDE_PLUGIN_ROOT) er beskyttet; ret_fagviden/del_opskrift
 # må ikke stå i en skills værktøjsliste (de spørger altid i boks); ret_fagviden er et Alekos-værktøj som de andre
 mkdir -p "$S/.claude/plugins/synced/org/alekos/hooks"
@@ -339,6 +353,18 @@ c2 "$S/.claude/commands/k.md" $'---\nallowed-tools: [Read, mcp__plugin_alekos_al
 c2 "$S/.claude/commands/k.md" $'---\nallowed-tools: mcp__plugin_alekos_alekos__del_opskrift\n---' 2
 c2 "$S/.claude/skills/x/SKILL.md" $'---\nname: x\nallowed-tools: [mcp__plugin_alekos-synced_alekos__ret_fagviden]\n---' 2
 chk "$(j mcp__plugin_alekos_alekos__ret_fagviden '{"emne":"fly","afsnit_noegle":"x","overskrift":"x","tekst":"x","basis_version":1}')" 0
+# 0.8.0 (kontrolfund): skrivende Alekos-værktøjer får "ask" fra vagten under ethvert servernavn — men spærringer går forud
+ask(){ o="$(printf '%s' "$(j "$1" '{}')" | HOME="$S" CLAUDE_CONFIG_DIR= ALEKOS_VAGT_OFFLINE=1 node "$V" 2>/dev/null)"; r=$?
+  d="$(printf '%s' "$o" | python3 -c 'import json,sys
+try: print(json.load(sys.stdin)["hookSpecificOutput"]["permissionDecision"])
+except Exception: print("-")')"
+  if [ "$r:$d" = "$2" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FEJL ask (fik $r:$d, ville $2): $1"; fi; }
+for t in mcp__plugin_alekos_alekos__gem_forslag mcp__plugin_alekos_alekos__del_opskrift mcp__plugin_alekos_alekos__ret_fagviden \
+         mcp__plugin_synced_alekos_alekos__ret_fagviden mcp__plugin_alekos-synced_alekos__gem_forslag mcp__alekos__del_opskrift \
+         mcp__claude_ai_Gmail__GEM_FORSLAG; do ask "$t" "0:ask"; done
+for t in mcp__plugin_alekos_alekos__hvem_er_jeg mcp__plugin_alekos_alekos__gem_upload mcp__plugin_synced_alekos_alekos__hvem_er_jeg \
+         mcp__plugin_alekos_alekos__ret_fagviden_x mcp__claude_ai_Gmail__search_threads; do ask "$t" "0:-"; done
+for t in mcp__plugin_alekos_synced_alekos__gem_forslag mcp__claude_ai_Dinero__ret_fagviden mcp__filesystem__gem_forslag; do ask "$t" "2:-"; done
 
 rm -rf "$S"
 # 0.7.1: /claude-forbind og /claude-adgang i al Chrome-tekst og JS (også pushState/links); almindelig tekst er fri

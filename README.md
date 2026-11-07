@@ -19,9 +19,9 @@ der åbner øverst, og tryk Enter.
 ## Org-synk (fra 0.8.0)
 
 Når Casper har slået org-synk til i claude.ai, får du pluginet automatisk, når du er logget ind i Claude Code med din
-Alekos-konto på claude.ai (Claude Code 2.1.273 eller nyere). Du skal ikke installere noget. Har du den gamle installation
-(afsnit 1), fjerner den sig selv i baggrunden, så snart den synkede udgave ligger på din Mac. Genstart så én gang.
-Log ind på alekos som i afsnit 2, hvis Claude beder om det.
+Alekos-konto på claude.ai (Claude Code 2.1.273 eller nyere). Har du den gamle installation (afsnit 1), siger Claude til
+dig, når skiftet er klar: skriv `/plugin uninstall alekos@alekos-intern` og genstart. Efter genstarten skal du se
+"Alekos-pluginet kører nu via org-synk". Ser du den ikke, så skriv `/plugin install alekos@alekos-intern` og ring til Casper.
 
 ## 1. Installation (én gang) — kun indtil org-synk er slået til
 
@@ -111,13 +111,17 @@ bruger falske mapper.
 den bruges fra næste genstart. Claude Codes egen `autoUpdate` slås også til (den venter op til 10 min efter start). Fjerner du en sikkerhedsregel, skal den også i `FJERNEDE_REGLER` i `plugins/alekos/sikkerhed/regler.mjs`
 (fletningen tilføjer ellers kun). Arbejdsregler, fagviden og adgang ligger på serveren og kræver ingen ny udgave.
 
-**Org-synk (0.8.0):** synkede plugins ligger i `~/.claude/plugins/synced/` og indlæses som `alekos@synced`, men en
-installeret `alekos@alekos-intern` vinder over dem. Opstartsreglen afinstallerer derfor markedsplads-kopien
-(`claude plugin uninstall alekos@alekos-intern` + `claude plugin marketplace remove alekos-intern`, i baggrunden, højst én
-gang i timen) — KUN når en synket kopi med `name` "alekos", version ≥ 0.8.0 og sikkerhedsvagten ligger på disken, og aldrig
-i din egen opsætning. Den synkede kopi henter ingen opdatering fra GitHub (synken gør det). Org-synk kræver et PRIVAT
-repo: udgiv 0.8.0, mens repoet stadig er offentligt, og flyt det først bagefter. Ny ejer (GitHub-organisation): tilføj
-`<organisation>/alekos-claude-plugin` i `GITHUB_REPOS` i `plugins/alekos/sikkerhed/regler.mjs` (repo-navnet må ikke ændres).
+**Org-synk (0.8.0):** synkede plugins ligger i `~/.claude/plugins/synced/<org>_<spand>/<mappe>/` (manifest.json +
+`.in_use`) og indlæses som `alekos@synced`, men en installeret `alekos@alekos-intern` vinder over dem — så den synkede
+kopis hooks kører ikke, før markedsplads-kopien er væk. Derfor afinstallerer pluginet ALDRIG sig selv (det kunne efterlade
+en Mac uden vagt). Når kontakten `org_synk_overgang` er tændt på serveren (standard fra) og en gyldig synket kopi er i brug
+(nyeste spand, i manifestet, `.in_use`, name "alekos", udgave ≥ den kørende og ≥ 0.8.0, med Alekos' vagt), får
+medarbejderen højst én gang i døgnet besked om at skrive `/plugin uninstall alekos@alekos-intern` og genstarte. Den synkede
+kopi bekræfter selv ("kører nu via org-synk"), henter ingen opdatering fra GitHub og beder Claude melde værktøjsnavnet.
+Org-synk kræver et PRIVAT repo: udgiv 0.8.0, mens repoet stadig er offentligt, og flyt det først bagefter. Ny ejer
+(GitHub-organisation): tilføj `<organisation>/alekos-claude-plugin` i `GITHUB_REPOS` i `plugins/alekos/sikkerhed/regler.mjs`
+(repo-navnet må ikke ændres). `gem_forslag`, `del_opskrift` og `ret_fagviden` spørger altid — også via vagten under ethvert
+servernavn. headersHelper sender `X-Alekos-Plugin` (udgaven), som serveren kræver for `ret_fagviden`.
 
 **Nødveje:** `node plugins/alekos/scripts/login.mjs` (login i Terminal, hvis browserloginet ikke virker) og
 `node opsaetning/sikkerhed.mjs` (sætter reglerne efter et "ja").
