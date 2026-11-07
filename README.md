@@ -16,7 +16,14 @@ Pluginet opdaterer sig selv. Nye regler, værktøjer og ændret adgang kommer au
 "Genstart" betyder i denne vejledning: i VS Code tryk **⌘ + Shift + P**, skriv **Developer: Reload Window** i feltet,
 der åbner øverst, og tryk Enter.
 
-## 1. Installation (én gang)
+## Org-synk (fra 0.8.0)
+
+Når Casper har slået org-synk til i claude.ai, får du pluginet automatisk, når du er logget ind i Claude Code med din
+Alekos-konto på claude.ai (Claude Code 2.1.273 eller nyere). Du skal ikke installere noget. Har du den gamle installation
+(afsnit 1), fjerner den sig selv i baggrunden, så snart den synkede udgave ligger på din Mac. Genstart så én gang.
+Log ind på alekos som i afsnit 2, hvis Claude beder om det.
+
+## 1. Installation (én gang) — kun indtil org-synk er slået til
 
 1. Skriv i skrivefeltet nederst i Claude Code (der hvor du skriver til Claude), og tryk Enter efter hver linje:
    ```
@@ -81,7 +88,8 @@ Casper kan fortryde enhver gemt rettelse.
 
 ## 7. Hvilken udgave har jeg?
 
-`/plugin` → fanen **Installed** → **alekos** viser versionen. Nye udgaver hentes af sig selv og bruges fra næste genstart.
+`/plugin` → fanen **Installed** → **alekos** viser versionen (med org-synk står der `alekos@synced`). Nye udgaver hentes af
+sig selv og bruges fra næste genstart.
 
 ## 8. Log ud
 
@@ -103,6 +111,14 @@ bruger falske mapper.
 den bruges fra næste genstart. Claude Codes egen `autoUpdate` slås også til (den venter op til 10 min efter start). Fjerner du en sikkerhedsregel, skal den også i `FJERNEDE_REGLER` i `plugins/alekos/sikkerhed/regler.mjs`
 (fletningen tilføjer ellers kun). Arbejdsregler, fagviden og adgang ligger på serveren og kræver ingen ny udgave.
 
+**Org-synk (0.8.0):** synkede plugins ligger i `~/.claude/plugins/synced/` og indlæses som `alekos@synced`, men en
+installeret `alekos@alekos-intern` vinder over dem. Opstartsreglen afinstallerer derfor markedsplads-kopien
+(`claude plugin uninstall alekos@alekos-intern` + `claude plugin marketplace remove alekos-intern`, i baggrunden, højst én
+gang i timen) — KUN når en synket kopi med `name` "alekos", version ≥ 0.8.0 og sikkerhedsvagten ligger på disken, og aldrig
+i din egen opsætning. Den synkede kopi henter ingen opdatering fra GitHub (synken gør det). Org-synk kræver et PRIVAT
+repo: udgiv 0.8.0, mens repoet stadig er offentligt, og flyt det først bagefter. Ny ejer (GitHub-organisation): tilføj
+`<organisation>/alekos-claude-plugin` i `GITHUB_REPOS` i `plugins/alekos/sikkerhed/regler.mjs` (repo-navnet må ikke ændres).
+
 **Nødveje:** `node plugins/alekos/scripts/login.mjs` (login i Terminal, hvis browserloginet ikke virker) og
 `node opsaetning/sikkerhed.mjs` (sætter reglerne efter et "ja").
 
@@ -113,7 +129,7 @@ MCP'ens grænser og log. Derfor er der flere værn, og hvert værn dækker noget
 
 | Værn | Dækker | Hvor |
 |---|---|---|
-| **Deny-regler** | Claudes egne værktøjer (Read, Grep, Glob, Edit/Write, WebFetch): browser- og appdata i `~/Library`, nøglering, `~/.ssh`, `~/Hemmeligt`, `~/.config`, `~/.supabase`, `~/.aws`, `~/.docker`, nøglefiler og shell-historik, `.env`-filer, `*.supabase.co`, Claude Codes indstillinger, `.mcp.json`, pluginmappen, git-hooks og VS Code-opsætning (kode, der senere kører uden sandkasse), `open`/`osascript`. Gem i Admin kræver altid din godkendelse. | `settings.json`, sat af opstartsreglen (`plugins/alekos/hooks/opstart.mjs`, regler i `plugins/alekos/sikkerhed/regler.mjs`) |
+| **Deny-regler** | Claudes egne værktøjer (Read, Grep, Glob, Edit/Write, WebFetch): browser- og appdata i `~/Library`, nøglering, `~/.ssh`, `~/Hemmeligt`, `~/.config`, `~/.supabase`, `~/.aws`, `~/.docker`, nøglefiler og shell-historik, `.env`-filer, `*.supabase.co`, Claude Codes indstillinger, `.mcp.json`, pluginmappen, git-hooks og VS Code-opsætning (kode, der senere kører uden sandkasse), `open`/`osascript`. Gem i Admin, deling af opskrifter og rettelser i fagviden kræver altid din godkendelse. | `settings.json`, sat af opstartsreglen (`plugins/alekos/hooks/opstart.mjs`, regler i `plugins/alekos/sikkerhed/regler.mjs`) |
 | **Sandkasse** | Alt, Claude kører i Bash (også scripts): styresystemet nægter læsning af de samme mapper og skrivning i Claude Codes indstillinger og pluginmappen; `*.supabase.co` er nægtet. | samme |
 | **Sikkerhedsvagt** | Andre forbindelser efter Caspers valg pr. person (hentet fra Alekos-serveren); værktøjer, der styrer filer/browser/terminal/editor, er altid spærret; Chrome-regler; stier og mønstre i alle filværktøjer og Bash. Fejler vagten, blokeres kaldet. | `plugins/alekos/hooks/vagt.mjs` |
 

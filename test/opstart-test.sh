@@ -13,6 +13,15 @@ felt(){ python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print(eval(sy
 # Ingen besked til personen (0.7.2: svaret har altid udgavelinjen til Claude, men ingen systemMessage).
 ingen_besked(){ printf "%s" "$out" | python3 -c 'import json,sys;d=json.load(sys.stdin);sys.exit(0 if "systemMessage" not in d and d["hookSpecificOutput"]["additionalContext"].startswith("Alekos-pluginet kører udgave ") else 1)'; }
 nb(){ ls "$1" 2>/dev/null | grep -c '^settings.json.alekos-backup-' ; }
+# Kører en kommando som forældreløs (forælder = launchd), så hooken ALDRIG finder et rigtigt Claude Code-program blandt
+# forfædrene (testen kan selv være startet fra Claude Code — så ville den rigtige claude blive kaldt). Venter ikke.
+uden_claude(){ python3 -c 'import os,sys,time
+if os.fork()==0:
+    if os.fork()==0:
+        while os.getppid()!=1: time.sleep(0.01)
+        os.execvp(sys.argv[1],sys.argv[1:])
+    os._exit(0)
+os.wait()' "$@"; }
 
 # 1) Tom opsætning: reglerne sættes, besked vises, ingen backup (der var ingen fil)
 K="$S/k1"; mkdir -p "$K"; koer "$K" "$S/h1"
@@ -159,7 +168,7 @@ cp "$NODE" "$S/bin/claude"; cp "$NODE" "$S/bin/node-agtig"; cp "$(dirname "$NODE
 K="$S/k15"; mkdir -p "$K/plugins"
 printf 'const fs=require("fs");fs.appendFileSync(%s,process.argv.slice(2).join(" ")+"\\n");fs.appendFileSync(%s,fs.realpathSync(process.cwd())+"\\n");\n' "'$S/kald.log'" "'$S/cwd.log'" > "$K/plugin"
 gh(){ printf '%s' "{\"alekos-intern\":{\"source\":{\"source\":\"$1\",\"repo\":\"$2\",\"path\":\"/x\"}}}" > "$K/plugins/known_marketplaces.json"; }
-start(){ rm -f "$S/kald.log" "$S/cwd.log"; HOME="$S/h15" CLAUDE_CONFIG_DIR="$K" "$1" -e 'require("child_process").spawnSync(process.env.NODE_BIN,[process.argv[1]],{stdio:["ignore","ignore","inherit"]})' "$O"; for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$S/kald.log" ] && break; sleep 0.2; done; }
+start(){ rm -f "$S/kald.log" "$S/cwd.log"; HOME="$S/h15" CLAUDE_CONFIG_DIR="$K" "$1" -e 'require("child_process").spawnSync(process.env.NODE_BIN,[process.argv[1]],{stdio:["ignore","ignore","inherit"]})' "$O"; for i in $(seq 1 15); do [ -s "$S/kald.log" ] && { sleep 1; break; }; sleep 0.2; done; }
 gh github CasperAlekosDK/alekos-claude-plugin; start "$S/bin/claude"
 ok "15 opdaterer markedspladsen og pluginet" 'grep -q "^marketplace update alekos-intern$" "$S/kald.log" && grep -q "^update alekos@alekos-intern$" "$S/kald.log"'
 ok "15 kører i opsætningsmappen" '[ "$(head -1 "$S/cwd.log")" = "$(cd "$K" && pwd -P)" ]'
@@ -175,7 +184,7 @@ ok "15 ikke for et falsk repo" '[ ! -e "$S/kald.log" ]'
 # 16) Kun et program, der hedder claude; ingen variabel kan pege et andet sted hen; mærkefil som link; lås
 gh github CasperAlekosDK/alekos-claude-plugin; start "$S/bin/node-agtig"; sleep 0.5
 ok "16 ikke et program med et andet navn" '[ ! -e "$S/kald.log" ]'
-rm -f "$S/kald.log"; HOME="$S/h15" CLAUDE_CONFIG_DIR="$K" CLAUDE_CODE_EXECPATH="$S/bin/claude" node "$O" >/dev/null; sleep 1
+rm -f "$S/kald.log"; HOME="$S/h15" CLAUDE_CONFIG_DIR="$K" CLAUDE_CODE_EXECPATH="$S/bin/claude" uden_claude node "$O" >/dev/null; sleep 1.5
 ok "16 CLAUDE_CODE_EXECPATH bruges ikke" '[ ! -e "$S/kald.log" ]'
 echo hemmelig > "$S/maal"; rm -f "$K/.alekos-opdateret"; ln -s "$S/maal" "$K/.alekos-opdateret"; touch -h -t 202001010000 "$K/.alekos-opdateret"; ok "16 linket findes" '[ -L "$K/.alekos-opdateret" ]'; start "$S/bin/claude"; sleep 0.5
 ok "16 mærkefil som link: målet urørt, ingen opdatering" '[ "$(cat "$S/maal")" = hemmelig ] && [ ! -e "$S/kald.log" ]'
@@ -190,6 +199,102 @@ ok "17 første start: ét JSON-svar med besked OG udgave" 'printf "%s" "$out" | 
 koer "$K" "$S/h17"
 ok "17 anden start: kun udgaven til Claude, ingen besked til personen" 'ingen_besked && printf "%s" "$out" | grep -q "kører udgave $V "'
 ok "17 udgaven er den i plugin.json (x.y.z)" 'printf "%s" "$V" | grep -Eq "^[0-9]+\.[0-9]+\.[0-9]+$"'
+
+# 18) 0.8.0: ret_fagviden spørger som del_opskrift; skrivende værktøjer spørger også under andre mulige servernavne, men
+#     allow udvides ALDRIG til andre navne; org-synkens mappe er skrivebeskyttet for kommandoer
+K="$S/k18"; mkdir -p "$K"; printf '%s' '{"permissions":{"allow":["mcp__plugin_alekos_alekos__ret_fagviden","mcp__plugin_alekos-synced_alekos__gem_forslag"]}}' > "$K/settings.json"; koer "$K" "$S/h18"
+ok "18 ret_fagviden spørger og står ikke i allow" '[ "$(felt "$K/settings.json" "\"mcp__plugin_alekos_alekos__ret_fagviden\" in d[\"permissions\"][\"ask\"] and \"mcp__plugin_alekos_alekos__ret_fagviden\" not in d[\"permissions\"][\"allow\"]")" = True ]'
+ok "18 gem/del/ret spørger under andre mulige navne" '[ "$(felt "$K/settings.json" "all(p+v in d[\"permissions\"][\"ask\"] for p in (\"mcp__plugin_alekos-synced_alekos__\",\"mcp__plugin_alekos_synced_alekos__\",\"mcp__plugin_synced_alekos_alekos__\") for v in (\"gem_forslag\",\"del_opskrift\",\"ret_fagviden\"))")" = True ]'
+ok "18 allow kun med Alekos-reglen (ingen andre plugin-navne), alt-gem fjernet fra allow" '[ "$(felt "$K/settings.json" "[x for x in d[\"permissions\"][\"allow\"] if x.startswith(\"mcp__plugin\")] == [\"mcp__plugin_alekos_alekos__*\"]")" = True ]'
+ok "18 org-synkens mappe i denyWrite" '[ "$(felt "$K/settings.json" "\"~/.claude/plugins/synced\" in d[\"sandbox\"][\"filesystem\"][\"denyWrite\"] and \"$K/plugins/synced\" in d[\"sandbox\"][\"filesystem\"][\"denyWrite\"]")" = True ]'
+
+# 19-24) 0.8.0: overgang til org-synk. Falsk "claude" (kopi af node) kører scriptet "plugin" i opsætningsmappen og logger kaldet.
+skript(){ # $1 = K; fejler på uninstall, hvis $S/fejl findes
+  printf 'const fs=require("fs");fs.appendFileSync(%s,process.argv.slice(2).join(" ")+"\\n");if(process.argv[2]==="uninstall"&&fs.existsSync(%s))process.exit(1);\n' "'$S/kald.log'" "'$S/fejl'" > "$1/plugin"; }
+synket(){ # $1 = K, $2 = version, $3 = navn (standard alekos), $4 = "uden-vagt" for at udelade vagten
+  local d="$1/plugins/synced/org-abc/alekos"; mkdir -p "$d/.claude-plugin" "$d/hooks"
+  printf '{"name":"%s","version":"%s"}' "${3:-alekos}" "$2" > "$d/.claude-plugin/plugin.json"; echo '{}' > "$d/hooks/hooks.json"
+  [ "${4:-}" = uden-vagt ] || echo '//' > "$d/hooks/vagt.mjs"; }
+ny(){ # $1 = navn: frisk opsætning med Alekos' GitHub-markedsplads og regler sat
+  K="$S/$1"; rm -rf "$K"; mkdir -p "$K/plugins/cache/alekos-intern/alekos/0.7.6"; skript "$K"
+  printf '%s' '{"alekos-intern":{"source":{"source":"github","repo":"CasperAlekosDK/alekos-claude-plugin"}}}' > "$K/plugins/known_marketplaces.json"
+  HOME="$S/h19" CLAUDE_CONFIG_DIR="$K" CLAUDE_PLUGIN_ROOT="$K/plugins/cache/alekos-intern/alekos/0.7.6" ALEKOS_OPDATERER=1 node "$O" >/dev/null; }
+mstart(){ # $1 = CLAUDE_PLUGIN_ROOT, $2 = ekstra ventetid; hookens svar i $out
+  rm -f "$S/kald.log"
+  out="$(HOME="$S/h19" CLAUDE_CONFIG_DIR="$K" CLAUDE_PLUGIN_ROOT="$1" "$S/bin/claude" -e 'const r=require("child_process").spawnSync(process.env.NODE_BIN,[process.argv[1]],{stdio:["ignore","pipe","inherit"]});process.stdout.write(r.stdout)' "$O")"
+  for i in $(seq 1 12); do [ -s "$S/kald.log" ] && break; sleep 0.2; done; sleep "${2:-0.3}"; }
+CACHE(){ printf '%s' "$K/plugins/cache/alekos-intern/alekos/0.7.6"; }
+SYNK(){ printf '%s' "$K/plugins/synced/org-abc/alekos"; }
+
+# 19) Markedsplads-kopi + synket kopi 0.8.0: afinstallerer sig selv i baggrunden (begge kommandoer), henter ingen opdatering
+ny k19; synket "$K" 0.8.0; foer="$(shasum "$K/settings.json")"; mstart "$(CACHE)" 1
+ok "19 afinstallerer markedsplads-kopien" 'grep -qx "uninstall alekos@alekos-intern" "$S/kald.log"'
+ok "19 fjerner markedspladsen" 'grep -qx "marketplace remove alekos-intern" "$S/kald.log"'
+ok "19 i rigtig rækkefølge, ingen opdatering fra GitHub" '[ "$(cat "$S/kald.log")" = "$(printf "uninstall alekos@alekos-intern\nmarketplace remove alekos-intern")" ]'
+ok "19 låsen fjernes, mærket står" '[ ! -e "$K/.alekos-overgang.laas" ] && [ -f "$K/.alekos-overgang" ]'
+ok "19 settings.json urørt" '[ "$(shasum "$K/settings.json")" = "$foer" ]'
+mstart "$(CACHE)"
+ok "19 idempotent: ikke igen inden for en time (heller ingen opdatering)" '[ ! -e "$S/kald.log" ]'
+ny k19b; synket "$K" 1.2.0; mkdir "$K/.alekos-overgang.laas"; mstart "$(CACHE)"
+ok "19b lås holdt: ingen anden kørsel" '[ ! -e "$S/kald.log" ]'
+
+# 20) Kører som den synkede kopi: ingen opdatering fra GitHub, ingen afinstallering, regler sættes, Claude får besked
+ny k20; synket "$K" 0.8.0; rm "$K/settings.json"; mstart "$(SYNK)"
+ok "20 ingen kald (hverken opdatering eller afinstallering)" '[ ! -e "$S/kald.log" ]'
+ok "20 reglerne sat" '[ "$(felt "$K/settings.json" "d[\"sandbox\"][\"enabled\"] and \"mcp__plugin_alekos_alekos__ret_fagviden\" in d[\"permissions\"][\"ask\"]")" = True ]'
+ok "20 Claude får at vide, at det er org-synk (værktøjsnavnet skal meldes)" 'printf "%s" "$out" | grep -q "org-synk (alekos@synced)"'
+mstart "$(CACHE)"; ok "20 markedsplads-kopien siger det ikke" '! printf "%s" "$out" | grep -q "org-synk"'
+
+# 21) Ingen afinstallering uden en bekræftet synket kopi
+ny k21; mstart "$(CACHE)"
+ok "21 ingen synket kopi: ingen afinstallering (almindelig opdatering)" '! grep -q uninstall "$S/kald.log" 2>/dev/null && grep -qx "update alekos@alekos-intern" "$S/kald.log"'
+for v in "0.7.9" "0.8" "x.y.z"; do ny k21v; synket "$K" "$v"; mstart "$(CACHE)"; ok "21 synket $v er for gammel/ugyldig" '! grep -q uninstall "$S/kald.log" 2>/dev/null'; done
+ny k21n; synket "$K" 0.8.0 andet-plugin; mstart "$(CACHE)"; ok "21 andet plugin-navn" '! grep -q uninstall "$S/kald.log" 2>/dev/null'
+ny k21h; synket "$K" 0.8.0 alekos uden-vagt; mstart "$(CACHE)"; ok "21 synket kopi uden sikkerhedsvagt" '! grep -q uninstall "$S/kald.log" 2>/dev/null'
+ny k21l; mkdir -p "$S/udenfor/org/alekos"; synket "$K" 0.8.0; mv "$K/plugins/synced" "$S/udenfor/s"; ln -s "$S/udenfor/s" "$K/plugins/synced"; mstart "$(CACHE)"
+ok "21 synced som genvej (link) tæller ikke" '! grep -q uninstall "$S/kald.log" 2>/dev/null'
+ny k21e; synket "$K" 0.8.0; python3 -c 'import json,sys;f=sys.argv[1];d=json.load(open(f));d["enabledPlugins"]={"alekos@synced":False};json.dump(d,open(f,"w"))' "$K/settings.json"; mstart "$(CACHE)"
+ok "21 synket kopi slået fra i enabledPlugins" '! grep -q uninstall "$S/kald.log" 2>/dev/null'
+ny k21d; synket "$K" 0.8.0; mstart "$S/lokal-kildemappe/plugins/alekos"
+ok "21 lokal mappe (ikke markedspladsens cache)" '! grep -q uninstall "$S/kald.log" 2>/dev/null'
+ny k21g; synket "$K" 0.8.0; printf '%s' '{"alekos-intern":{"source":{"source":"directory","path":"/x"}}}' > "$K/plugins/known_marketplaces.json"; mstart "$(CACHE)"
+ok "21 markedsplads fra lokal mappe (Caspers test)" '! grep -q uninstall "$S/kald.log" 2>/dev/null'
+ny k21f; synket "$K" 0.8.0; printf '%s' '{"alekos-intern":{"source":{"source":"github","repo":"angriber/alekos-claude-plugin"}}}' > "$K/plugins/known_marketplaces.json"; mstart "$(CACHE)"
+ok "21 falsk repo" '! grep -q uninstall "$S/kald.log" 2>/dev/null'
+ny k21p; synket "$K" 0.8.0; rm -f "$S/kald.log"; HOME="$S/h19" CLAUDE_CONFIG_DIR="$K" CLAUDE_PLUGIN_ROOT="$(CACHE)" uden_claude node "$O" >/dev/null; sleep 1.5
+ok "21 kun når Claude Code selv har startet hooken" '[ ! -e "$S/kald.log" ] && [ ! -e "$K/.alekos-overgang" ]'
+
+# 22) Fejler afinstalleringen: låsen fjernes, markedspladsen fjernes ikke, settings.json urørt; prøves igen om en time
+ny k22; synket "$K" 0.8.0; touch "$S/fejl"; foer="$(shasum "$K/settings.json")"; mstart "$(CACHE)" 1; rm -f "$S/fejl"
+ok "22 kun afinstallering forsøgt" '[ "$(cat "$S/kald.log")" = "uninstall alekos@alekos-intern" ]'
+ok "22 låsen fjernet" 'for i in 1 2 3 4 5; do [ -e "$K/.alekos-overgang.laas" ] || break; sleep 0.2; done; [ ! -e "$K/.alekos-overgang.laas" ]'
+ok "22 settings.json urørt" '[ "$(shasum "$K/settings.json")" = "$foer" ]'
+touch -t 202001010000 "$K/.alekos-overgang"; mstart "$(CACHE)" 1
+ok "22 prøves igen efter en time" 'grep -qx "marketplace remove alekos-intern" "$S/kald.log"'
+
+# 23) Caspers egen opsætning: intet sker
+if [ "$(id -un)" = "casperkloster" ]; then
+  H="$S/h23"; K="$H/.claude"; mkdir -p "$K/plugins/cache/alekos-intern/alekos/0.7.6"; skript "$K"; synket "$K" 0.8.0; echo '{"x":1}' > "$K/settings.json"
+  printf '%s' '{"alekos-intern":{"source":{"source":"github","repo":"CasperAlekosDK/alekos-claude-plugin"}}}' > "$K/plugins/known_marketplaces.json"
+  rm -f "$S/kald.log"; HOME="$H" CLAUDE_CONFIG_DIR= CLAUDE_PLUGIN_ROOT="$K/plugins/cache/alekos-intern/alekos/0.7.6" "$S/bin/claude" -e 'require("child_process").spawnSync(process.env.NODE_BIN,[process.argv[1]],{stdio:"ignore"})' "$O"; sleep 1.5
+  ok "23 Caspers opsætning: ingen afinstallering/opdatering, settings urørt" '[ ! -e "$S/kald.log" ] && [ "$(cat "$K/settings.json")" = "{\"x\":1}" ] && [ ! -e "$K/.alekos-overgang" ]'
+fi
+
+# 24) Ny ejer af repoet (GitHub-organisation): tilføjes kun i GITHUB_REPOS — så virker opdatering og autoUpdate
+KOPI="$S/kopi"; cp -R "$(dirname "$O")/.." "$KOPI"
+python3 - "$KOPI/sikkerhed/regler.mjs" <<'PY'
+import sys;f=sys.argv[1];s=open(f).read();a='export const GITHUB_REPOS = [GITHUB_REPO];'
+assert a in s;open(f,'w').write(s.replace(a,'export const GITHUB_REPOS = [GITHUB_REPO, "AlekosOrg/alekos-claude-plugin"];'))
+PY
+O_GL="$O"; O="$KOPI/hooks/opstart.mjs"
+ny k24; printf '%s' '{"alekos-intern":{"source":{"source":"github","repo":"alekosorg/Alekos-Claude-Plugin"}}}' > "$K/plugins/known_marketplaces.json"; mstart "$(CACHE)"
+ok "24 ny ejer: opdatering hentes" 'grep -qx "update alekos@alekos-intern" "$S/kald.log"'
+ny k24b; printf '%s' '{"alekos-intern":{"source":{"source":"github","repo":"AlekosOrg/alekos-claude-plugin"}}}' > "$K/plugins/known_marketplaces.json"; synket "$K" 0.8.0; mstart "$(CACHE)" 1
+ok "24 ny ejer: overgang til org-synk" 'grep -qx "uninstall alekos@alekos-intern" "$S/kald.log"'
+printf '%s' '{"extraKnownMarketplaces":{"alekos-intern":{"source":{"source":"github","repo":"AlekosOrg/alekos-claude-plugin"}}}}' > "$K/settings.json"; koer "$K" "$S/h24"
+ok "24 ny ejer: autoUpdate slås til" '[ "$(felt "$K/settings.json" "d[\"extraKnownMarketplaces\"][\"alekos-intern\"].get(\"autoUpdate\")")" = True ]'
+O="$O_GL"; ny k24c; printf '%s' '{"alekos-intern":{"source":{"source":"github","repo":"AlekosOrg/alekos-claude-plugin"}}}' > "$K/plugins/known_marketplaces.json"; mstart "$(CACHE)"
+ok "24 uden for listen: ingen opdatering" '[ ! -e "$S/kald.log" ]'
 
 rm -rf "$S"
 echo "bestået $pass, fejl $fail"

@@ -28,7 +28,11 @@ const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT || path.resolve(path.dirname(
 const MARKED = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 // Claude Codes konfigurationsmappe: ~/.claude, eller CLAUDE_CONFIG_DIR (fx en isoleret testinstallation).
 const KONFIG = process.env.CLAUDE_CONFIG_DIR ? path.resolve(process.env.CLAUDE_CONFIG_DIR) : path.join(HOME, ".claude");
-const BESKYTTET = [path.join(HOME, ".claude"), KONFIG, PLUGIN_ROOT, path.dirname(fileURLToPath(import.meta.url))];
+// 0.8.0: org-synkens mappe (alekos@synced) nævnes udtrykkeligt — ligger allerede under ~/.claude, men skal aldrig kunne
+// falde ud, hvis reglen for ~/.claude ændres. PLUGIN_ROOT (CLAUDE_PLUGIN_ROOT) dækker den kørende kopi, også den synkede.
+const BESKYTTET = [path.join(HOME, ".claude"), KONFIG, path.join(HOME, ".claude", "plugins", "synced"), path.join(KONFIG, "plugins", "synced"),
+  PLUGIN_ROOT, path.dirname(fileURLToPath(import.meta.url))];
+for (const m of [...BESKYTTET]) { try { BESKYTTET.push(fs.realpathSync(m)); } catch { /* findes ikke */ } }
 if (fs.existsSync(path.join(MARKED, ".claude-plugin", "marketplace.json"))) BESKYTTET.push(MARKED);
 
 const STIER = [
@@ -376,7 +380,7 @@ function faerdigFil(p) {
 
 /**
  * Egne skills/agents/kommandoer må ikke få indstillinger, der kører kode uden sandkasse eller slår værn fra:
- * hooks, mcpServers, permissionMode/bypass, gem_forslag i allowed-tools — heller ikke skjult (flow-YAML, escapes,
+ * hooks, mcpServers, permissionMode/bypass, gem_forslag/del_opskrift/ret_fagviden i allowed-tools — heller ikke skjult (flow-YAML, escapes,
  * anker/merge, tags).
  */
 function tjekFrontmatter(tekst) {
@@ -400,7 +404,8 @@ function tjekFrontmatter(tekst) {
     if (/^[ \t]*"[^"\n]*\\[xuUN0-9]/.test(vaerdi ?? "")) bloker("escape-tegn i en skill/agent/kommando");
     if (/bypass[\s_-]*permissions/i.test(vaerdi ?? "") && /permission/i.test(noegle)) farlig();
     // Alekos' gem-værktøj må aldrig stå i værktøjslister (heller ikke via * eller kun servernavnet).
-    if (/tools/i.test(noegle) && /gem_forslag|mcp__plugin_alekos_alekos(__\*|\*|[\s,\]"']|$)/i.test(linje)) farlig();
+    // 0.8.0: også del_opskrift og ret_fagviden (spørger altid i boks) og under ethvert servernavn.
+    if (/tools/i.test(noegle) && /gem_forslag|del_opskrift|ret_fagviden|mcp__plugin_alekos_alekos(__\*|\*|[\s,\]"']|$)/i.test(linje)) farlig();
   }
 }
 

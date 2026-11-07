@@ -12,7 +12,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { GITHUB_REPO, MARKEDSPLADS, erCaspersOpsaetning, flet, konfigMappe } from "../sikkerhed/regler.mjs";
+import { MARKEDSPLADS, SYNKET_UNDERMAPPE, erAlekosRepo, erCaspersOpsaetning, flet, konfigMappe } from "../sikkerhed/regler.mjs";
 
 const BACKUP_PREFIX = "settings.json.alekos-backup-";
 const FOERSTE_BACKUP = "settings.json.foer-alekos"; // slettes aldrig
@@ -33,7 +33,13 @@ function koerendeUdgave() {
 }
 
 function skrivSvar() {
-  const udgave = `Alekos-pluginet kører udgave ${koerendeUdgave()} (nyeste udgave står i hvem_er_jeg under udgaver.plugin_nyeste; nævn den kun, hvis medarbejderen spørger, eller hvis den kørende er ældre).`;
+  let udgave = `Alekos-pluginet kører udgave ${koerendeUdgave()} (nyeste udgave står i hvem_er_jeg under udgaver.plugin_nyeste; nævn den kun, hvis medarbejderen spørger, eller hvis den kørende er ældre).`;
+  // 0.8.0: kører vi som org-synket kopi, skal vi kunne se, hvad Alekos-værktøjerne faktisk hedder (ikke bevist endnu).
+  try {
+    if (koererSomSynket(konfigMappe())) {
+      udgave += " Pluginet er hentet via org-synk (alekos@synced). Hedder Alekos-værktøjerne IKKE mcp__plugin_alekos_alekos__…, så sig til medarbejderen, at Casper skal have det præcise værktøjsnavn (fx mcp__…__hvem_er_jeg).";
+    }
+  } catch { /* kun en oplysning */ }
   const svar = { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: udgave } };
   if (personBesked) {
     svar.systemMessage = personBesked;
@@ -184,33 +190,140 @@ function claudeProgram() {
   return null;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// 0.8.0: overgang til org-synk (claude.ai). Den synkede kopi (alekos@synced) ligger under <konfig>/plugins/synced, men
+// en installeret markedsplads-kopi (alekos@alekos-intern) VINDER over den. Derfor: når en synket kopi beviseligt ligger
+// på disken, afinstallerer markedsplads-kopien sig selv i baggrunden, og den synkede tager over ved næste start.
+// Aldrig uden en bekræftet synket kopi (ellers ville personen stå uden sikkerhedsvagt), aldrig for Casper.
+const MIN_SYNKET = [0, 8, 0];
+const rod = () => process.env.CLAUDE_PLUGIN_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const rigtig = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+function versionOk(v) {
+  const m = typeof v === "string" ? v.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/) : null;
+  if (!m) return false;
+  for (let i = 0; i < 3; i++) {
+    const a = Number(m[i + 1]);
+    if (a !== MIN_SYNKET[i]) return a > MIN_SYNKET[i];
+  }
+  return true;
+}
+
+/** Kører denne hook fra den org-synkede kopi (under <konfig>/plugins/synced)? */
+function koererSomSynket(konfig) {
+  return inde(rigtig(path.join(konfig, SYNKET_UNDERMAPPE)), rigtig(rod()));
+}
+
+/**
+ * Den synkede Alekos-kopi på disken: en mappe under <konfig>/plugins/synced med .claude-plugin/plugin.json, hvor
+ * name = "alekos" og version ≥ 0.8.0, og hvor sikkerhedsvagten findes (hooks/hooks.json + hooks/vagt.mjs). Mappernes
+ * nøjagtige opbygning kendes ikke, så der ledes (højst 6 niveauer, ingen genveje). Findes ingen: null.
+ */
+function findSynketKopi(konfig) {
+  const top = path.join(konfig, SYNKET_UNDERMAPPE);
+  try { if (!fs.lstatSync(top).isDirectory()) return null; } catch { return null; }
+  const fil = (p) => { try { return fs.lstatSync(p).isFile(); } catch { return false; } };
+  const koe = [[top, 0]];
+  let set = 0;
+  while (koe.length && set < 2000) {
+    const [mappe, dybde] = koe.shift();
+    set++;
+    const pj = path.join(mappe, ".claude-plugin", "plugin.json");
+    if (fil(pj)) {
+      const d = laes(pj);
+      if (d?.name === "alekos" && versionOk(d.version) && fil(path.join(mappe, "hooks", "hooks.json")) && fil(path.join(mappe, "hooks", "vagt.mjs"))) {
+        return { mappe, version: d.version };
+      }
+    }
+    if (dybde >= 6) continue;
+    let poster = [];
+    try { poster = fs.readdirSync(mappe, { withFileTypes: true }); } catch { continue; }
+    for (const e of poster) if (e.isDirectory() && !e.isSymbolicLink()) koe.push([path.join(mappe, e.name), dybde + 1]);
+  }
+  return null;
+}
+
+/** Kører vi som den installerede markedsplads-kopi fra Alekos' GitHub (ikke en lokal mappe, ikke den synkede)? */
+function erMarkedspladsKopi(konfig) {
+  if (koererSomSynket(konfig)) return false;
+  if (!inde(rigtig(path.join(konfig, "plugins", "cache")), rigtig(rod()))) return false;
+  const km = laes(path.join(konfig, "plugins", "known_marketplaces.json"))?.[MARKEDSPLADS];
+  return km?.source?.source === "github" && erAlekosRepo(km.source.repo);
+}
+
+/** Lås i opsætningsmappen (kun én baggrundskørsel ad gangen). null = en anden har den. */
+function tagBaggrundsLaas(konfig, navn, doedMs) {
+  const laas = path.join(konfig, navn);
+  try {
+    fs.mkdirSync(laas);
+    return laas;
+  } catch (e) {
+    if (e?.code !== "EEXIST") return null;
+    try {
+      if (Date.now() - fs.statSync(laas).mtimeMs < doedMs) return null;
+      fs.rmSync(laas, { recursive: true, force: true });
+      fs.mkdirSync(laas);
+      return laas;
+    } catch { return null; }
+  }
+}
+
+/** Mærkefil: true = prøvet inden for ventetiden (eller filen er et link) → gør intet. Ellers skrives den på ny. */
+function forNylig(maerke, ventMs) {
+  try {
+    const st = fs.lstatSync(maerke);
+    if (!st.isFile()) return true; // aldrig gennem et link
+    if (Date.now() - st.mtimeMs < ventMs) return true;
+  } catch { /* første gang */ }
+  return false;
+}
+
+/** Returnerer true, hvis overgangen er sat i gang (eller allerede er i gang) — så hentes ingen opdatering fra GitHub. */
+function overgangTilSynk() {
+  if (process.env.ALEKOS_OPDATERER) return false;
+  const konfig = konfigMappe();
+  if (erCaspersOpsaetning(konfig)) return false;
+  if (!erMarkedspladsKopi(konfig)) return false;
+  const synket = findSynketKopi(konfig);
+  if (!synket) return false; // aldrig afinstallere uden en bekræftet synket kopi
+  const s = laes(path.join(konfig, "settings.json"));
+  if (s?.enabledPlugins?.["alekos@synced"] === false) return false; // slået fra: den ville ikke tage over
+  const cl = claudeProgram();
+  if (!cl) return true;
+  const maerke = path.join(konfig, ".alekos-overgang");
+  if (forNylig(maerke, 3_600_000)) return true;
+  const laas = tagBaggrundsLaas(konfig, ".alekos-overgang.laas", 1_800_000);
+  if (!laas) return true;
+  try {
+    fs.rmSync(maerke, { force: true });
+    fs.writeFileSync(maerke, `${new Date().toISOString()} synket ${synket.version}\n`, { flag: "wx", mode: 0o600 });
+    const env = { ...process.env, ALEKOS_OPDATERER: "1" };
+    // Låsen fjernes af kommandoen selv, også når den fejler (mærket står, så der prøves igen om en time).
+    const p = spawn("/bin/sh", ["-c", '"$0" plugin uninstall "$1" && "$0" plugin marketplace remove "$2"; rm -rf "$3"', cl, `alekos@${MARKEDSPLADS}`, MARKEDSPLADS, laas], {
+      cwd: konfig, detached: true, stdio: "ignore", env,
+    });
+    p.unref();
+  } catch (e) {
+    fs.rmSync(laas, { recursive: true, force: true });
+    throw e;
+  }
+  return true;
+}
+
 function opdaterIBaggrunden() {
   if (process.env.ALEKOS_OPDATERER) return; // aldrig i den proces, vi selv starter
   const konfig = konfigMappe();
   if (erCaspersOpsaetning(konfig)) return;
+  if (koererSomSynket(konfig)) return; // 0.8.0: org-synk henter selv nye udgaver
   const km = laes(path.join(konfig, "plugins", "known_marketplaces.json"))?.[MARKEDSPLADS];
-  if (km?.source?.source !== "github" || String(km.source.repo).toLowerCase() !== GITHUB_REPO.toLowerCase()) return;
+  if (km?.source?.source !== "github" || !erAlekosRepo(km.source.repo)) return;
   // Kun Claude Codes eget program (ikke fx node, der ellers ville køre ./plugin.js fra projektmappen — kontrollantfund).
   const cl = claudeProgram();
   if (!cl) return;
   const maerke = path.join(konfig, ".alekos-opdateret");
-  try {
-    const st = fs.lstatSync(maerke);
-    if (!st.isFile()) return; // aldrig gennem et link
-    if (Date.now() - st.mtimeMs < 3_600_000) return;
-  } catch { /* første gang */ }
+  if (forNylig(maerke, 3_600_000)) return;
   // Lås: kun én opdatering ad gangen (fjernes af kommandoen selv, regnes for død efter 30 min).
-  const laas = path.join(konfig, ".alekos-opdaterer.laas");
-  try {
-    fs.mkdirSync(laas);
-  } catch (e) {
-    if (e?.code !== "EEXIST") return;
-    try {
-      if (Date.now() - fs.statSync(laas).mtimeMs < 1_800_000) return;
-      fs.rmSync(laas, { recursive: true, force: true });
-      fs.mkdirSync(laas);
-    } catch { return; }
-  }
+  const laas = tagBaggrundsLaas(konfig, ".alekos-opdaterer.laas", 1_800_000);
+  if (!laas) return;
   fs.rmSync(maerke, { force: true });
   fs.writeFileSync(maerke, new Date().toISOString() + "\n", { flag: "wx", mode: 0o600 });
   const env = { ...process.env, ALEKOS_OPDATERER: "1" };
@@ -229,7 +342,11 @@ try {
 try {
   skrivSvar();
 } catch { /* svaret må aldrig stoppe Claude Code */ }
+let overgang = false;
 try {
-  opdaterIBaggrunden();
+  overgang = overgangTilSynk();
+} catch { overgang = true; /* hellere ingen opdatering end to baggrundskørsler; prøves igen ved næste start */ }
+try {
+  if (!overgang) opdaterIBaggrunden();
 } catch { /* en fejlet opdatering må aldrig stoppe Claude Code; prøves igen om en time */ }
 process.exit(0);

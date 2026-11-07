@@ -76,6 +76,17 @@ export const GEM_VAERKTOEJ = "mcp__plugin_alekos_alekos__gem_forslag";
 // 0.7.6 (02.11.2026, Caspers ja + kontrolfund): del_opskrift sender en opskrift til Caspers kø — medarbejderen godkender
 // hver deling i Claude Codes boks (så en vildledt Claude ikke kan sende noget af sig selv). ask vinder over allow.
 export const DEL_OPSKRIFT_VAERKTOEJ = "mcp__plugin_alekos_alekos__del_opskrift";
+// 0.8.0 (fagviden, 07.11.2026): ret_fagviden skriver fagviden for et emne — spørger i boks præcis som del_opskrift.
+export const RET_FAGVIDEN_VAERKTOEJ = "mcp__plugin_alekos_alekos__ret_fagviden";
+// 0.8.0 (org-synk): navnet på pluginets MCP-værktøjer forventes at være det samme, når pluginet kommer via claude.ai's
+// org-synk (alekos@synced) — men det er IKKE bevist. Allow-reglen udvides derfor ALDRIG til andre navne. Hvis navnet
+// alligevel er anderledes, spørger Claude Code ved hvert kald (ingen allow) — og de skrivende værktøjer står også som ask
+// under de plausible andre navne, så et "tillad altid" for hele serveren aldrig kan springe boksen over (ask vinder).
+export const ALEKOS_MCP_PRAEFIKS = "mcp__plugin_alekos_alekos__";
+export const ALTERNATIVE_MCP_PRAEFIKSER = ["mcp__plugin_alekos-synced_alekos__", "mcp__plugin_alekos_synced_alekos__", "mcp__plugin_synced_alekos_alekos__"];
+const SKRIVENDE_VAERKTOEJER = ["gem_forslag", "del_opskrift", "ret_fagviden"];
+export const SPOERG_ALTID = [GEM_VAERKTOEJ, DEL_OPSKRIFT_VAERKTOEJ, RET_FAGVIDEN_VAERKTOEJ,
+  ...ALTERNATIVE_MCP_PRAEFIKSER.flatMap((p) => SKRIVENDE_VAERKTOEJER.map((v) => p + v))];
 // 0.5.9 (Caspers valg 23.10.2026, Alex: "den kommer virkelig tit med at jeg skal godkende"): Alekos-MCP'en og Claude in
 // Chrome spørger ikke længere ved hvert kald. Gem i Admin spørger stadig (ask på GEM_VAERKTOEJ vinder over allow;
 // gem_upload kører uden spørgsmål, men serveren lader den kun afslutte et upload, der allerede er godkendt via gem_forslag), og
@@ -87,6 +98,14 @@ export const TILLADT_UDEN_SPOERGSMAAL = [ALEKOS_MCP_REGEL, CHROME_REGEL];
 // så nye udgaver (regler, vagt, login) kommer ud uden zip og uden at medarbejderen gør noget.
 export const MARKEDSPLADS = "alekos-intern";
 export const GITHUB_REPO = "CasperAlekosDK/alekos-claude-plugin";
+// 0.8.0: repoet flytter til en GitHub-organisation (navnet er ikke besluttet). Tilføj den nye adresse HER (fx
+// "<organisation>/alekos-claude-plugin") — det er den eneste liste, opstartsreglen og fletningen tjekker. Repo-navnet
+// skal blive "alekos-claude-plugin" (vagten genkender mappen på navnet).
+export const GITHUB_REPOS = [GITHUB_REPO];
+/** Er repo (fra known_marketplaces.json/settings.json) et af Alekos' egne? Små/store bogstaver ens, intet andet. */
+export const erAlekosRepo = (repo) => typeof repo === "string" && GITHUB_REPOS.some((r) => r.toLowerCase() === repo.toLowerCase());
+// 0.8.0: org-synk (claude.ai) lægger pluginet her og indlæser det som alekos@synced.
+export const SYNKET_UNDERMAPPE = path.join("plugins", "synced");
 
 /** Claude Codes opsætningsmappe: CLAUDE_CONFIG_DIR (isoleret test) eller ~/.claude. */
 export function konfigMappe(env = process.env) {
@@ -182,7 +201,7 @@ export function regler({ ekstraMapper = [] } = {}) {
         "WebFetch(domain:*.supabase.co)",
         ...FARLIGE_MCP,
       ],
-      ask: [GEM_VAERKTOEJ, DEL_OPSKRIFT_VAERKTOEJ],
+      ask: SPOERG_ALTID,
     },
     sandbox: {
       enabled: true,
@@ -190,7 +209,7 @@ export function regler({ ekstraMapper = [] } = {}) {
       // 0.7.0: en kommando, der ikke kan køre i sandkassen, må køre udenfor, når medarbejderen siger ja.
       allowUnsandboxedCommands: true,
       // Pluginmappen og Claude Codes egen mappe: kommandoer må ikke skrive dér (rettes kun via Edit, som vagten tjekker).
-      filesystem: { denyRead: [...LAAST, ...LAAST_FILER], denyWrite: [...mapper, "~/.claude", "~/.claude.json", ...ONEDRIVE_FARLIGE, ...SKRIVBARE_FARLIGE], allowWrite: [`${ONEDRIVE}/**/*`, ...SKRIVBARE] },
+      filesystem: { denyRead: [...LAAST, ...LAAST_FILER], denyWrite: [...mapper, "~/.claude", "~/.claude/plugins/synced", "~/.claude.json", ...ONEDRIVE_FARLIGE, ...SKRIVBARE_FARLIGE], allowWrite: [`${ONEDRIVE}/**/*`, ...SKRIVBARE] },
       // ↑ "/**/*", ikke "/**": sandkassen fjerner et afsluttende "/**", og så rammer stjernen kun selve mappen — ikke
       //   filerne i den (afprøvet med @anthropic-ai/sandbox-runtime 23.10.2026: kun "/**/*" giver skriveadgang indeni).
       // 0.4.0: kommandoer må gerne bruge internettet (Claude Code spørger første gang pr. domæne) — undtagen Supabase.
@@ -219,7 +238,7 @@ export function flet(nu, { konfig, ekstraMapper = [], fjernUndtagelser = true } 
   ud.permissions.allow = union(ud.permissions.allow, R.permissions.allow).filter((r) => !FJERNEDE_REGLER.includes(r) || R.permissions.allow.includes(r));
   if (Array.isArray(ud.permissions.allow)) {
     // En allow på gem-værktøjet ville være død (ask vinder), men fjern den, så det er tydeligt.
-    ud.permissions.allow = ud.permissions.allow.filter((r) => r !== GEM_VAERKTOEJ && r !== DEL_OPSKRIFT_VAERKTOEJ && !String(r).startsWith("mcp__plugin_alekos_alekos__gem"));
+    ud.permissions.allow = ud.permissions.allow.filter((r) => !SPOERG_ALTID.includes(r) && !String(r).startsWith("mcp__plugin_alekos_alekos__gem"));
   }
   if (!erObjekt(ud.sandbox)) ud.sandbox = {};
   ud.sandbox.enabled = true;
@@ -232,7 +251,7 @@ export function flet(nu, { konfig, ekstraMapper = [], fjernUndtagelser = true } 
   // Isoleret test (CLAUDE_CONFIG_DIR): spær også testmappen og den rigtige ~/.claude for Claudes værktøjer.
   if (konfig && !erStandard(konfig)) {
     ud.permissions.deny = union(ud.permissions.deny, ["Edit(~/.claude/**)", `Edit(${absolut(konfig)}/settings.json)`, `Edit(${absolut(konfig)}/plugins/**)`]);
-    ud.sandbox.filesystem.denyWrite = union(ud.sandbox.filesystem.denyWrite, [konfig]);
+    ud.sandbox.filesystem.denyWrite = union(ud.sandbox.filesystem.denyWrite, [konfig, path.join(konfig, SYNKET_UNDERMAPPE)]);
   }
   if (!erObjekt(ud.sandbox.network)) ud.sandbox.network = {};
   delete ud.sandbox.network.strictAllowlist; // 0.3.x lukkede helt for internet i kommandoer
@@ -243,7 +262,7 @@ export function flet(nu, { konfig, ekstraMapper = [], fjernUndtagelser = true } 
   if (fjernUndtagelser) delete ud.sandbox.excludedCommands;
   // Automatisk opdatering — KUN når markedspladsen er Alekos' GitHub-repo (kilden ændres aldrig her).
   const mp = erObjekt(ud.extraKnownMarketplaces) ? ud.extraKnownMarketplaces[MARKEDSPLADS] : null;
-  if (erObjekt(mp) && erObjekt(mp.source) && mp.source.source === "github" && String(mp.source.repo).toLowerCase() === GITHUB_REPO.toLowerCase()) {
+  if (erObjekt(mp) && erObjekt(mp.source) && mp.source.source === "github" && erAlekosRepo(mp.source.repo)) {
     mp.autoUpdate = true;
   }
   return ud;

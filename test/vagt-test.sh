@@ -322,6 +322,24 @@ kt=$(node -e "import('$N').then(m=>console.log(m.lagerKonto({USER:'casper'})+'|'
 nk "{\"mcpOAuth\":{\"plugin:alekos:alekos|abc\":{\"accessToken\":\"$K43\"}}}" null
 grep -q 'console\.\(log\|error\)' "$N" && { fail=$((fail+1)); echo "FEJL: noegle.mjs må aldrig skrive noget ud"; } || pass=$((pass+1))
 
+# 0.8.0: org-synkens mappe (alekos@synced) og den kørende kopi (CLAUDE_PLUGIN_ROOT) er beskyttet; ret_fagviden/del_opskrift
+# må ikke stå i en skills værktøjsliste (de spørger altid i boks); ret_fagviden er et Alekos-værktøj som de andre
+mkdir -p "$S/.claude/plugins/synced/org/alekos/hooks"
+w Write "$S/.claude/plugins/synced/org/alekos/hooks/vagt.mjs" 2; w Edit "$S/.claude/plugins/synced/x.json" 2
+w Write "~/.claude/plugins/synced/org/alekos/skills/s/SKILL.md" 2
+b 'echo x > ~/.claude/plugins/synced/org/alekos/hooks/vagt.mjs' 2; b 'rm -rf "$HOME/.claude/plugins/synced"' 2
+c file_upload "{\"paths\":[\"$S/.claude/plugins/synced/org/alekos/hooks/vagt.mjs\"],\"ref\":\"r\",\"tabId\":1}" 2
+ln -s "$S/.claude/plugins/synced" "$P/synk"; w Write synk/org/alekos/hooks/vagt.mjs 2
+# Kopi uden for ~/.claude (fx en anden synk-opbygning): beskyttet, fordi den er CLAUDE_PLUGIN_ROOT
+mkdir -p "$S/andetsted/alekos/hooks"
+pr(){ printf '%s' "$(j "$1" "{\"file_path\":\"$2\"}")" | HOME="$S" CLAUDE_CONFIG_DIR= CLAUDE_PLUGIN_ROOT="$S/andetsted/alekos" ALEKOS_VAGT_OFFLINE=1 node "$V" >/dev/null 2>&1; r=$?; if [ $r = "$3" ]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FEJL (fik $r, ville $3): pluginrod $1 $2"; fi; }
+pr Write "$S/andetsted/alekos/hooks/vagt.mjs" 2; pr Edit "$S/andetsted/alekos/.claude-plugin/plugin.json" 2; pr Write "$S/andetsted/ved-siden-af.txt" 0
+w Write "$S/andetsted/alekos/hooks/vagt.mjs" 0
+c2 "$S/.claude/commands/k.md" $'---\nallowed-tools: [Read, mcp__plugin_alekos_alekos__ret_fagviden]\n---' 2
+c2 "$S/.claude/commands/k.md" $'---\nallowed-tools: mcp__plugin_alekos_alekos__del_opskrift\n---' 2
+c2 "$S/.claude/skills/x/SKILL.md" $'---\nname: x\nallowed-tools: [mcp__plugin_alekos-synced_alekos__ret_fagviden]\n---' 2
+chk "$(j mcp__plugin_alekos_alekos__ret_fagviden '{"emne":"fly","afsnit_noegle":"x","overskrift":"x","tekst":"x","basis_version":1}')" 0
+
 rm -rf "$S"
 # 0.7.1: /claude-forbind og /claude-adgang i al Chrome-tekst og JS (også pushState/links); almindelig tekst er fri
 HA='["*"]'
