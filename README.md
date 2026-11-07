@@ -119,8 +119,8 @@ en Mac uden vagt). Når kontakten `org_synk_overgang` er tændt på serveren (st
 medarbejderen højst én gang i døgnet besked om at skrive `/plugin uninstall alekos@alekos-intern` og genstarte. Den synkede
 kopi bekræfter selv ("kører nu via org-synk"), henter ingen opdatering fra GitHub og beder Claude melde værktøjsnavnet.
 Org-synk kræver et PRIVAT repo: udgiv 0.8.0, mens repoet stadig er offentligt, og flyt det først bagefter. Ny ejer
-(GitHub-organisation): tilføj `<organisation>/alekos-claude-plugin` i `GITHUB_REPOS` i `plugins/alekos/sikkerhed/regler.mjs`
-(repo-navnet må ikke ændres). `gem_forslag`, `del_opskrift` og `ret_fagviden` spørger altid — også via vagten under ethvert
+(0.8.1): GitHub-organisationen `Chasing-Destinations-ApS` står i `GITHUB_REPOS` i `plugins/alekos/sikkerhed/regler.mjs`
+sammen med den gamle adresse (repo-navnet må ikke ændres). `gem_forslag`, `del_opskrift` og `ret_fagviden` spørger altid — også via vagten under ethvert
 servernavn. Ved `ret_fagviden` lægger vagten udgaven i argumentet `_alekos_plugin` (hookens `updatedInput` sammen med
 "ask"); serveren kræver ≥ 0.8.0. headersHelper er uændret (sender `{}` uden nødnøgle, så browserloginet bruges).
 

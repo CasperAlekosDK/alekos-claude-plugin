@@ -98,12 +98,15 @@ export const TILLADT_UDEN_SPOERGSMAAL = [ALEKOS_MCP_REGEL, CHROME_REGEL];
 // så nye udgaver (regler, vagt, login) kommer ud uden zip og uden at medarbejderen gør noget.
 export const MARKEDSPLADS = "alekos-intern";
 export const GITHUB_REPO = "CasperAlekosDK/alekos-claude-plugin";
-// 0.8.0: repoet flytter til en GitHub-organisation (navnet er ikke besluttet). Tilføj den nye adresse HER (fx
-// "<organisation>/alekos-claude-plugin") — det er den eneste liste, opstartsreglen og fletningen tjekker. Repo-navnet
-// skal blive "alekos-claude-plugin" (vagten genkender mappen på navnet).
-export const GITHUB_REPOS = [GITHUB_REPO];
+// 0.8.1: repoet flytter til GitHub-organisationen Chasing-Destinations-ApS (oprettet af Casper 07.11.2026). Begge
+// adresser genkendes, så installationer fra før og efter flytningen opdateres. Det er den eneste liste, opstartsreglen
+// og fletningen tjekker. Repo-navnet skal blive "alekos-claude-plugin" (vagten genkender mappen på navnet).
+export const GITHUB_REPO_ORG = "Chasing-Destinations-ApS/alekos-claude-plugin";
+export const GITHUB_REPOS = [GITHUB_REPO, GITHUB_REPO_ORG];
 /** Er repo (fra known_marketplaces.json/settings.json) et af Alekos' egne? Små/store bogstaver ens, intet andet. */
-export const erAlekosRepo = (repo) => typeof repo === "string" && GITHUB_REPOS.some((r) => r.toLowerCase() === repo.toLowerCase());
+// 0.8.1 (kontrolfund): kun ASCII "ejer/repo" — ellers kan toLowerCase gøre fx Kelvin-tegnet (U+212A) til "k".
+const REPO_FORM = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+export const erAlekosRepo = (repo) => typeof repo === "string" && REPO_FORM.test(repo) && GITHUB_REPOS.some((r) => r.toLowerCase() === repo.toLowerCase());
 // 0.8.0: org-synk (claude.ai) lægger pluginet her og indlæser det som alekos@synced.
 export const SYNKET_UNDERMAPPE = path.join("plugins", "synced");
 
