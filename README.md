@@ -27,12 +27,12 @@ dig, når skiftet er klar: skriv `/plugin uninstall alekos@alekos-intern` og gen
 
 1. Skriv i skrivefeltet nederst i Claude Code (der hvor du skriver til Claude), og tryk Enter efter hver linje:
    ```
-   /plugin marketplace add CasperAlekosDK/alekos-claude-plugin
+   /plugin marketplace add Chasing-Destinations-ApS/alekos-claude-plugin
    /plugin install alekos@alekos-intern
    ```
    Den første svarer, at markedspladsen er tilføjet, den anden, at pluginet er installeret. Spørger den om lov, så
    klik ja/installér. Virker kommandoerne ikke: skriv `/plugin`, vælg fanen **Marketplaces**, tilføj
-   `CasperAlekosDK/alekos-claude-plugin`, find **alekos**, og vælg Installér. Ser det anderledes ud: ring til Casper.
+   `Chasing-Destinations-ApS/alekos-claude-plugin`, find **alekos**, og vælg Installér. Ser det anderledes ud: ring til Casper.
 2. **Genstart.** Nu får du beskeden "Alekos: sikkerhedsreglerne er sat …" (eller Claude siger det til dig).
 3. **Genstart én gang til**, så sikkerhedsbeskyttelsen er slået til. Pluginet sætter selv reglerne — du skal ikke gøre
    noget i Terminal.
