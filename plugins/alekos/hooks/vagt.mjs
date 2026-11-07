@@ -518,9 +518,23 @@ async function tjekServer(server, rest, navn) {
 // 0.8.0 (kontrolfund 07.11.2026): de skrivende Alekos-værktøjer spørger ALTID i Claude Codes boks — uanset hvilket
 // servernavn værktøjet får (fx via org-synk), og selv om nogen har klikket "tillad altid". Kun efter alle spærringer.
 const SKRIVENDE_ALEKOS = /__(gem_forslag|del_opskrift|ret_fagviden)$/i;
+// ret_fagviden: udgaven sendes med som argumentet _alekos_plugin (serveren kræver ≥ 0.8.0). Docs (hooks, PreToolUse):
+// updatedInput "Replaces the entire input object … Combine with "allow" to auto-approve, or "ask" to show the modified
+// input to the user." — derfor hele det oprindelige input + feltet. Ikke via headersHelper (kunne slå browserloginet fra).
+function egenUdgave() {
+  try {
+    const v = JSON.parse(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".claude-plugin", "plugin.json"), "utf8"))?.version;
+    return typeof v === "string" && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(v) ? v : null;
+  } catch { return null; }
+}
 function spoerg(t) {
-  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask",
-    permissionDecisionReason: `Alekos: ${t.split("__").pop()} gemmer eller deler noget — godkend kun, hvis du selv har sagt ja i chatten.` } }));
+  const ud = { hookEventName: "PreToolUse", permissionDecision: "ask",
+    permissionDecisionReason: `Alekos: ${t.split("__").pop()} gemmer eller deler noget — godkend kun, hvis du selv har sagt ja i chatten.` };
+  if (/__ret_fagviden$/i.test(t)) {
+    const v = egenUdgave();
+    if (v) ud.updatedInput = { ...inp, _alekos_plugin: v };
+  }
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: ud }));
   process.exit(0);
 }
 if (tool.startsWith("mcp__")) {

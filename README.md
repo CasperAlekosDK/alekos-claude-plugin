@@ -121,7 +121,8 @@ kopi bekræfter selv ("kører nu via org-synk"), henter ingen opdatering fra Git
 Org-synk kræver et PRIVAT repo: udgiv 0.8.0, mens repoet stadig er offentligt, og flyt det først bagefter. Ny ejer
 (GitHub-organisation): tilføj `<organisation>/alekos-claude-plugin` i `GITHUB_REPOS` i `plugins/alekos/sikkerhed/regler.mjs`
 (repo-navnet må ikke ændres). `gem_forslag`, `del_opskrift` og `ret_fagviden` spørger altid — også via vagten under ethvert
-servernavn. headersHelper sender `X-Alekos-Plugin` (udgaven), som serveren kræver for `ret_fagviden`.
+servernavn. Ved `ret_fagviden` lægger vagten udgaven i argumentet `_alekos_plugin` (hookens `updatedInput` sammen med
+"ask"); serveren kræver ≥ 0.8.0. headersHelper er uændret (sender `{}` uden nødnøgle, så browserloginet bruges).
 
 **Nødveje:** `node plugins/alekos/scripts/login.mjs` (login i Terminal, hvis browserloginet ikke virker) og
 `node opsaetning/sikkerhed.mjs` (sætter reglerne efter et "ja").
